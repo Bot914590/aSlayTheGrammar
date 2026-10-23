@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Candlelight Grammar · карточный рогалик</title>
+<!-- Google Fonts: IM Fell English SC (офлайн-fallback: Georgia, serif) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="scene">
+  <div class="cold-light"></div>
+
+  <!-- этап 4.2: flex-колонка комнаты: [дух] → [стол] → [HP-ряд]. Всё ВНЕ стола. -->
+  <div class="room-stack">
+
+    <!-- ДУХ: гравюрный силуэт + имя — над дальней кромкой стола (не переворачивается) -->
+    <div class="ghost" id="ghost">
+      <svg class="ghost-icon" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M8 27 q0 -4 1.5 -6 Q8 16 9.5 11 A7 7 0 0 1 22.5 11 Q24 16 22.5 21 Q24 23 24 27 q-2 -1.5 -4 0 q-2 -1.5 -4 0 q-2 -1.5 -4 0 q-2 -1.5 -4 0 z"
+              fill="none" stroke="#9fb4c8" stroke-width="1.6" stroke-linejoin="round"/>
+        <circle cx="13.5" cy="14.5" r="1.1" fill="#9fb4c8"/>
+        <circle cx="18.5" cy="14.5" r="1.1" fill="#9fb4c8"/>
+      </svg>
+      <div class="ghost-name" id="ghostName"></div>
+    </div>
+
+    <!-- СТОЛ: центральный переворачиваемый объект. Переворот: window.flipTable() или F -->
+    <div class="table-anchor">
+    <div class="table3d">
+      <div class="table-flip" id="tableFlip">
+
+        <!-- ГРАНЬ БОЙ: синие доски под тёплым светом свечей -->
+        <div class="face-battle" id="faceBattle">
+          <div class="playzone"></div>
+
+          <!-- ДОСКА-НАДПИСЬ ВРАГА: лежит НА дальней половине столешницы (внутри грани, этап 3.9) -->
+          <div class="enemy-board-slot" id="enemyBoardSlot">
+            <div class="enemy-board" id="enemyBoard">
+              <span class="eb-corner tl"></span><span class="eb-corner tr"></span>
+              <span class="eb-corner bl"></span><span class="eb-corner br"></span>
+              <div class="eb-clue" id="ebClue" hidden></div>
+              <div class="eb-sentence" id="ebSentence"></div>
+            </div>
+          </div>
+
+          <!-- ПОЛОСА ОБЪЯСНЕНИЯ: сразу под доской, тоже на грани боя -->
+          <div class="explain" id="explain">
+            <div class="explain-inner" id="explainInner">
+              <div class="fixed-line" id="fixedLine"></div>
+              <div class="why-line" id="whyLine"></div>
+            </div>
+          </div>
+
+          <div class="hand" id="hand"></div>
+          <div class="face-vignette"></div>
+        </div>
+
+        <!-- ГРАНЬ КАРТА (этап 5): горизонтальная карта акта в духе Slay the Spire,
+             слева направо: старт (col 0) ... босс (col 11). Pan по X: drag/колесо. -->
+        <div class="face-map">
+          <svg class="map-emblem" viewBox="0 0 100 100" aria-hidden="true">
+            <g fill="none" stroke="#e8dcc8" stroke-width="1.6">
+              <circle cx="50" cy="50" r="40"/>
+              <circle cx="50" cy="50" r="31" stroke-dasharray="3 5"/>
+              <path d="M50 12 L57 50 L50 88 L43 50 Z"/>
+              <path d="M12 50 L50 43 L88 50 L50 57 Z"/>
+            </g>
+            <circle cx="50" cy="50" r="3" fill="#e8dcc8"/>
+          </svg>
+          <div class="map-pan" id="mapPan">
+            <div class="map-scroll" id="mapScroll">
+              <svg class="map-lines" id="mapLines" preserveAspectRatio="none"></svg>
+              <div class="map-head" id="mapHead"></div>
+              <!-- узлы и сургучная печать START генерирует JS (детерминированно по seed) -->
+            </div>
+          </div>
+          <div class="face-vignette"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- HP команды: 6 свечей — этап 4.2: ВНЕ стола, flex-колонка комнаты ПОСЛЕ стола:
+       ряд стоит в тёмной зоне между нижней кромкой стола и подсказкой файла. -->
+  <div class="hp-row" id="hpRow"></div>
+
+  </div><!-- /.room-stack -->
+
+  <!-- тёплые световые пятна на столешнице, X точно под свечами -->
+  <div class="warm-pool left"></div>
+  <div class="warm-pool right"></div>
+
+  <!-- левая свеча: уровень комнаты, не переворачивается -->
+  <div class="candle left">
+    <div class="glow"></div>
+    <div class="flame-wrap">
+      <div class="flame"></div>
+      <div class="flame-core"></div>
+    </div>
+    <div class="wick"></div>
+    <div class="wax-body"></div>
+    <div class="holder"></div>
+    <div class="candle-shadow"></div>
+  </div>
+
+  <!-- правая свеча -->
+  <div class="candle right">
+    <div class="glow"></div>
+    <div class="flame-wrap">
+      <div class="flame"></div>
+      <div class="flame-core"></div>
+    </div>
+    <div class="wick"></div>
+    <div class="wax-body"></div>
+    <div class="holder"></div>
+    <div class="candle-shadow"></div>
+  </div>
+
+  <!-- ЭТАП 6.1: ЛЕГЕНДА КАРТЫ — ВНЕ СТОЛА, панель в слое комнаты слева от стола;
+       на ширине <1400px скрыта, вместо неё круглая кнопка "?" (клик раскрывает
+       панель ПОВЕРХ левого края стола и сворачивает обратно) -->
+  <div class="legend" id="mapLegend">
+    <div class="legend-card" id="legendCard">
+      <div class="lg-title">Легенда карты</div>
+      <div class="lg-grid" id="legendGrid"><!-- заполняет JS --></div>
+    </div>
+    <button class="legend-btn" id="legendBtn" type="button" aria-label="Легенда карты">?</button>
+  </div>
+
+  <!-- виньетка поверх -->
+  <div class="vignette"></div>
+</div>
+
+<!-- ВЕРХНЯЯ ПАНЕЛЬ -->
+<header id="topbar">
+  <h1>CANDLELIGHT GRAMMAR<span class="sub">карточный рогалик</span></h1>
+  <div class="btn-row">
+    <button id="btn-sound" class="btn" type="button">&#9834; Звук: вкл</button>
+    <button id="btn-lupa" class="btn" type="button" aria-pressed="false">&#128269; Лупа: выкл</button>
+    <button id="btn-newrun" class="btn" type="button">Новый run</button>
+  </div>
+</header>
+
+<div id="hint">двойной клик по файлу &middot; F = переворот стола &middot; клик по карте руки = сыграть</div>
+
+<!-- ОВЕРЛЕИ: изгнание духа / свечи погасли -->
+<div class="overlay" id="overlayWin">
+  <div class="scroll-panel">
+    <h2>Дух изгнан</h2>
+    <div class="sp-rule"></div>
+    <div class="sp-phrase" id="winPhrase"></div>
+    <div class="sp-why" id="winWhy"></div>
+    <button class="btn" id="btnNextEnemy" type="button">Вернуться на карту</button>
+  </div>
+</div>
+<div class="overlay" id="overlayLose">
+  <div class="scroll-panel">
+    <h2>Свечи погасли</h2>
+    <div class="sp-rule"></div>
+    <div class="sp-why">Тьма забрала шесть свечей &mdash; бой начинается заново.</div>
+    <button class="btn" id="btnRestartFight" type="button">Начать бой заново</button>
+  </div>
+</div>
+<!-- этап 5: универсальный оверлей карты (привал / лавка-событие-сундук заглушки / акт / run) -->
+<div class="overlay" id="overlayGeneric">
+  <div class="scroll-panel">
+    <h2 id="ogTitle">&nbsp;</h2>
+    <div class="sp-rule"></div>
+    <div class="sp-why" id="ogBody"></div>
+    <button class="btn" id="btnOgAction" type="button">Продолжить</button>
+  </div>
+</div>
+
+<script src="content.js"></script>
+<script src="glyphs.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

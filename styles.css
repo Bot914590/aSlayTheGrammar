@@ -1,0 +1,1173 @@
+  /* ============ ПАЛИТРА-ТОКЕНЫ ============ */
+  :root{
+    --wood-base:#16202b;
+    --wood-plank:#1f2c3a;
+    --wood-plank2:#243447;
+    --wood-grain:#2c3d52;
+    --wood-edge:#3a4d63;
+    --room:#0b1016;
+    --room-deep:#05080c;
+    --parchment-a:#d8c9a8;
+    --parchment-b:#c4b28c;
+    --ink:#241a10;
+    --wax:#8a2f2b;
+    --candle:#f5c542;
+    --candle-hi:#fff8e7;
+    --bone:#e8dcc8;
+    --dust:#9fb4c8;
+    --shadow-cold:rgba(5,10,16,.4);
+
+    /* геометрия стола — единый источник правды для граней, свечей и пятен */
+    --tw:min(76vw, 1100px);          /* ширина стола */
+    --th:min(74vh, 760px);           /* высота стола */
+    --tcx:calc(50vw - var(--tw)/2);  /* левый край стола в координатах вьюпорта */
+    --cand-inset:calc(var(--tw)*0.045 + 12px); /* отступ свечи/пятна от края столешницы */
+    --lgw:200px;                     /* ширина панели легенды (этап 6.1) */
+    --lgright:calc(50vw + var(--tw)/2 + 10px); /* правый край панели = правый край стола + зазор */
+  }
+
+  *{ margin:0; padding:0; box-sizing:border-box; }
+
+  html,body{
+    height:100%;
+    overflow:hidden;
+  }
+
+  body{
+    font-family:'IM Fell English SC', Georgia, 'Times New Roman', serif;
+    background:
+      radial-gradient(ellipse 120% 90% at 50% 42%, var(--room) 0%, var(--room) 45%, var(--room-deep) 100%);
+    color:var(--bone);
+    user-select:none;
+    -webkit-user-select:none;
+  }
+
+  /* ============ СЦЕНА ============ */
+  /* этап 4.2: комната = flex-колонка по вертикали:
+     [блок духа: иконка+имя] → [.table-anchor(.table3d)] → [.hp-row] → [#hint].
+     Ряд HP физически стоит ВНЕ стола, в свободной тёмной зоне под ним —
+     ни рука, ни кант его перекрыть не могут. */
+  #scene{
+    position:fixed;
+    inset:0;
+    overflow:hidden;
+    perspective:1600px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+  }
+  .room-stack{
+    flex:0 0 auto;                 /* колонка: дух → стол → HP (подсказка #hint вне потока) */
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+
+  /* ---- ВИНЬЕТКА сине-чёрная поверх всего ---- */
+  .vignette{
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    z-index:60;
+    background:
+      radial-gradient(ellipse 78% 68% at 50% 46%, rgba(5,8,12,0) 55%, rgba(5,8,12,.55) 82%, rgba(5,8,12,.92) 100%);
+  }
+
+  /* ---- ХОЛОДНЫЙ ВЕРХНИЙ СВЕТ ---- */
+  .cold-light{
+    position:absolute;
+    left:50%;
+    top:-12%;
+    width:120%;
+    height:60%;
+    transform:translateX(-50%);
+    pointer-events:none;
+    z-index:6;
+    background:radial-gradient(ellipse 60% 55% at 50% 40%, rgba(159,180,200,.06) 0%, rgba(159,180,200,0) 70%);
+  }
+
+  /* ============ СТОЛ: ЦЕНТРАЛЬНЫЙ ПЕРЕВАРАЧИВАЕМЫЙ ОБЪЕКТ ============ */
+  /* этап 4.2: стол — flex-элемент колонки комнаты (не absolute): высота явно
+     из JS (--face-h, формула min(74vh,760px) сохранена в fitFaceHeights). */
+  .table-anchor{
+    position:relative;
+    flex:0 0 auto;
+    width:var(--tw);
+    height:var(--face-h, var(--th));
+    perspective:1600px;
+    z-index:10;
+  }
+  /* покой-наклон: столешница видна под углом со стороны игрока, как в карточных играх */
+  .table3d{
+    position:absolute;
+    inset:0;
+    transform-style:preserve-3d;
+    transform:rotateX(10deg);
+  }
+  .table-flip{
+    position:absolute;
+    inset:0;
+    transform-style:preserve-3d;
+    transition:transform .9s cubic-bezier(.4,.1,.2,1);
+    will-change:transform;
+    cursor:pointer;
+  }
+  .table-flip.flipped{ transform:rotateX(180deg); }
+  /* надёжная видимость граней (не зависит от backface-расчёта): по умолчанию — бой,
+     при .flipped (карта) — только .face-map */
+  .face-map{ visibility:hidden; }
+  .table-flip.flipped .face-battle{ visibility:hidden; }
+  .table-flip.flipped .face-map{ visibility:visible; }
+  /* на время переворота грани глухи к кликам (никакого ложного «пана») */
+  .table-flip.no-pan .face-battle,
+  .table-flip.no-pan .face-map{ pointer-events:none; }
+
+  .face-battle,
+  .face-map{
+    position:absolute;
+    inset:0;
+    backface-visibility:hidden;
+    -webkit-backface-visibility:hidden;
+    border:10px solid var(--wood-edge);   /* кант: во время флипа читается как кромка/толщина стола */
+    box-shadow:
+      0 26px 60px rgba(5,10,16,.55),       /* внешняя тень */
+      inset 0 1px 0 rgba(159,180,200,.16), /* холодный блик по верхней кромке канта */
+      inset 0 0 70px rgba(5,10,16,.5);     /* inner-shadow по периметру: стол углублён */
+  }
+  .face-map{ transform:rotateX(180deg); } /* задняя грань — заглушка под карту этапа 4 */
+
+  /* ---- ГРАНЬ БОЙ: холодные сине-стальные доски ---- */
+  .face-battle{
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;                /* доска/полоса/рука строго в границах грани и канта */
+    background:
+      /* тонкие линии текстуры вдоль досок */
+      repeating-linear-gradient(90deg,
+        transparent 0px,
+        transparent 46px,
+        var(--wood-grain) 46px,
+        var(--wood-grain) 47px,
+        transparent 47px,
+        transparent 92px),
+      /* чередование досок --wood-plank / --wood-plank2 */
+      repeating-linear-gradient(90deg,
+        var(--wood-plank) 0px,
+        var(--wood-plank) 90px,
+        var(--wood-plank2) 90px,
+        var(--wood-plank2) 180px),
+      var(--wood-base);
+  }
+  /* едва заметное волокно — только холодными тонами */
+  .face-battle::before{
+    content:"";
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    background:
+      repeating-linear-gradient(0deg,
+        transparent 0px,
+        transparent 34px,
+        rgba(44,61,82,.35) 34px,
+        rgba(44,61,82,.35) 35px);
+    opacity:.35;
+  }
+  /* виньетка самой грани */
+  .face-vignette{
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    background:
+      radial-gradient(ellipse 72% 62% at 50% 50%, rgba(5,8,12,0) 52%, rgba(5,8,12,.5) 100%);
+  }
+
+  /* ---- ГРАНЬ КАРТА: тот же тон дерева темнее на 8%, заглушка ---- */
+  .face-map{
+    background:linear-gradient(rgba(5,8,12,.08), rgba(5,8,12,.08)),
+      repeating-linear-gradient(90deg,
+        transparent 0px,
+        transparent 46px,
+        var(--wood-grain) 46px,
+        var(--wood-grain) 47px,
+        transparent 47px,
+        transparent 92px),
+      repeating-linear-gradient(90deg,
+        var(--wood-plank) 0px,
+        var(--wood-plank) 90px,
+        var(--wood-plank2) 90px,
+        var(--wood-plank2) 180px),
+      var(--wood-base);
+  }
+  /* компас / прошитая нить-силуэт */
+  .map-emblem{
+    position:absolute;
+    left:50%;
+    top:50%;
+    width:min(220px,30%);
+    aspect-ratio:1/1;
+    transform:translate(-50%,-50%);
+    opacity:.08;
+    pointer-events:none;
+  }
+
+  /* ============ ЭТАП 6.1: ЛЕГЕНДА КАРТЫ — ВНЕ СТОЛА ============ */
+  /* вертикальная панель в слое комнаты СЛЕВА от стола (left:12px, top:50%);
+     вне .face-map → не сминается гранью, не перекрыта свечой, не перехватывает
+     клики карты; раскрытие/сворачивание — только opacity+visibility */
+  .legend{
+    position:absolute;
+    left:12px;
+    top:50%;
+    transform:translateY(-50%);
+    width:min(var(--lgw), calc(var(--lgright) - 12px)); /* не залезает на стол и левую свечу */
+    z-index:14;                      /* слой комнаты: выше стола, ниже виньетки(60)/оверлеев(55) */
+    pointer-events:none;             /* сама плашка кликов не перехватывает */
+  }
+  .legend-card{
+    background:linear-gradient(160deg, var(--parchment-a) 0%, var(--parchment-b) 100%);
+    border:2px solid var(--ink);
+    outline:1px solid rgba(36,26,16,.5);
+    outline-offset:-5px;
+    border-radius:8px;
+    box-shadow:0 8px 18px rgba(5,10,16,.5);
+    padding:10px 12px 11px;
+    width:100%;                     /* одна колонка на всю панель 200px */
+    box-sizing:border-box;
+    color:var(--ink);
+    font-family:'IM Fell English SC', Georgia, serif;
+    opacity:1;
+    visibility:visible;
+    transition:opacity .25s ease;
+  }
+  .lg-title{
+    font-size:13px;
+    letter-spacing:.24em;
+    opacity:.75;
+    margin-bottom:6px;
+    white-space:nowrap;
+  }
+  .lg-grid{
+    display:block;                  /* ОДНА колонка строк (не сетка 2xN) */
+  }
+  .lg-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:15px;                 /* подписи капсом 14-16px */
+    letter-spacing:.08em;
+    white-space:nowrap;
+    line-height:1.35;               /* свободный межстрочный */
+    padding:2px 0;
+  }
+  .lg-row svg{
+    width:20px; height:20px; flex:none;
+    fill:none; stroke:var(--ink); stroke-width:1.8;
+    stroke-linecap:round; stroke-linejoin:round;
+  }
+  .lg-sep{
+    grid-column:1 / -1;
+    border-top:1px dashed rgba(36,26,16,.45);
+    margin:3px 0 1px;
+  }
+  .lg-dot{
+    width:20px; height:20px; flex:none; border-radius:50%;
+    background:rgba(36,26,16,.14);
+  }
+  .lg-dot.cur{
+    border:2px solid var(--wax);
+    box-shadow:0 0 0 1px rgba(138,47,43,.35);
+  }
+  .lg-dot.pulse{
+    border:2px dashed var(--wax);
+    animation:nodePulse 1.8s ease-in-out infinite;   /* тот же пульс, что у доступных */
+  }
+  .lg-dot.faded{ opacity:.3; filter:saturate(.2); }
+  /* свёрнутое состояние (<1400px): панель скрыта, видна круглая кнопка "?" */
+  .legend.folded .legend-card{ opacity:0; visibility:hidden; }
+  .legend-btn{
+    display:none;
+    position:absolute;
+    left:0; top:50%;
+    transform:translateY(-50%);
+    width:44px; height:44px;
+    border-radius:50%;
+    background:linear-gradient(160deg, var(--parchment-a) 0%, var(--parchment-b) 100%);
+    border:2px solid var(--ink);
+    color:var(--ink);
+    font-family:'IM Fell English SC', Georgia, serif;
+    font-size:22px;
+    line-height:1;
+    cursor:pointer;
+    pointer-events:auto;
+    box-shadow:0 6px 14px rgba(5,10,16,.5);
+    padding:0;
+  }
+  @media (max-width:1399px){
+    .legend .legend-card{ opacity:0; visibility:hidden; }   /* панель скрыта */
+    .legend-btn{ display:block; }                           /* вместо неё "?" у левого края */
+    .legend.open{ z-index:57; }        /* раскрытая панель — ПОВЕРХ стола/левого свечи-края оверлеем (выше виньетки 60? нет: 57 < 60 виньетки, но виньетка pointer-events:none; выше оверлеев боя не нужно) */
+    .legend.open .legend-card{ opacity:1; visibility:visible; }
+    .legend.open .legend-btn{ opacity:0; visibility:hidden; }
+  }
+  .map-label{
+    position:absolute;
+    left:50%;
+    top:calc(50% + min(140px, 18%));
+    transform:translateX(-50%);
+    font-size:13px;
+    letter-spacing:.3em;
+    color:var(--bone);
+    opacity:.4;
+    white-space:nowrap;
+    pointer-events:none;
+  }
+
+  /* ============ ЭТАП 5: ЛИСТ КАРТЫ АКТА (внутри .face-map) ============ */
+  /* горизонтальный pan по X: лист шире грани; смещение — только transform/opacity */
+  .map-pan{
+    position:absolute;
+    inset:0;
+    overflow:hidden;               /* лист строго внутри канта грани */
+    cursor:grab;
+    touch-action:none;             /* drag мышью/тачем без системного жеста */
+    z-index:2;
+  }
+  .map-pan.dragging{ cursor:grabbing; }
+  .map-scroll{
+    position:absolute;
+    left:0; top:0; bottom:0;
+    width:2100px;                  /* ~12 колонок × 172px + поля */
+    transform:translateX(0px);     /* JS задаёт pan (clamp по краям) */
+    will-change:transform;
+  }
+  .map-lines{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    pointer-events:none;
+    overflow:visible;
+  }
+  .mline{ fill:none; stroke-width:2; }
+  .m-future   { stroke:#5a6a7a; stroke-opacity:.3; stroke-dasharray:4 6; }
+  .m-open     { stroke:var(--bone); stroke-opacity:.8; stroke-dasharray:4 6; }
+  .m-traveled { stroke:var(--candle); stroke-opacity:.8; stroke-width:1.4; }
+  .map-head{
+    position:absolute;
+    top:14px; left:24px;
+    font-size:14px;
+    letter-spacing:.26em;
+    color:var(--dust);
+    opacity:.55;
+    pointer-events:none;
+    white-space:nowrap;
+  }
+  .map-node{
+    position:absolute;
+    width:64px; height:64px;
+    margin:-32px 0 0 -32px;        /* центр в (left,top) */
+    display:flex; align-items:center; justify-content:center;
+    border-radius:50%;
+    background:radial-gradient(circle at 38% 32%, var(--wood-plank2) 0%, var(--wood-base) 78%);
+    border:2px solid var(--wood-edge);
+    box-shadow:0 6px 14px rgba(5,10,16,.55), inset 0 0 12px rgba(5,10,16,.5);
+    opacity:.22;                   /* будущие */
+    pointer-events:none;
+  }
+  .map-node svg{ width:34px; height:34px; display:block; }
+  .map-node .mn-glyph{ fill:none; stroke:var(--bone); stroke-width:1.7; stroke-linecap:round; stroke-linejoin:round; }
+  .map-node.traveled{ opacity:.35; filter:saturate(.25); }
+  /* travelled+current (старт): не гасим полностью — кольцо текущего важнее */
+  .map-node.traveled.current{ opacity:.75; filter:saturate(.5); }
+  .map-node.current{
+    opacity:1;
+    transform:scale(1.15);
+    border-color:var(--candle);
+    box-shadow:0 0 0 3px rgba(245,197,66,.55), 0 0 26px rgba(245,197,66,.45),
+               0 6px 14px rgba(5,10,16,.55), inset 0 0 12px rgba(5,10,16,.5);
+  }
+  .map-node.current .mn-glyph{ stroke:var(--candle-hi); }
+  .map-node.open{
+    opacity:1;
+    pointer-events:auto;           /* кликабельны только доступные */
+    cursor:pointer;
+  }
+  .map-node.open .flame-pulse{
+    position:absolute;
+    inset:-7px;
+    border-radius:50%;
+    border:2px solid var(--candle);
+    opacity:0;
+    animation:nodePulse 1.8s ease-in-out infinite;   /* пульс пламени доступных */
+    pointer-events:none;
+  }
+  @keyframes nodePulse{
+    0%   { opacity:.7; transform:scale(.92); }
+    55%  { opacity:.15; transform:scale(1.14); }
+    100% { opacity:.7; transform:scale(.92); }
+  }
+  .map-node.boss{ width:84px; height:84px; margin:-42px 0 0 -42px; }
+  .map-node.boss svg{ width:48px; height:48px; }
+  /* клики по узлам (этап 5.1): узлы всегда поверх svg-слоя нитей */
+  .map-node{ z-index:3; }
+  /* shake недоступного/пройденного узла — только transform (у босса margin-центрирование) */
+  .map-node.node-shake{ animation:nodeShake .3s ease-in-out 0s 3; }
+  @keyframes nodeShake{
+    0%,100%{ transform:translateX(0); }
+    25%    { transform:translateX(-6px); }
+    75%    { transform:translateX(6px); }
+  }
+  .map-start{
+    position:absolute;
+    width:74px;
+    text-align:center;
+    font-size:13px;
+    letter-spacing:.24em;
+    color:var(--bone);
+    opacity:.85;
+    pointer-events:none;
+    transform:translate(-50%,-50%);
+  }
+  .map-start .wax-seal{
+    display:block;
+    width:46px; height:46px;
+    margin:0 auto 6px;
+    border-radius:50%;
+    background:radial-gradient(circle at 38% 32%, #a8443c 0%, var(--wax) 55%, #6e2320 100%);
+    box-shadow:0 4px 10px rgba(5,10,16,.6), inset 0 0 8px rgba(5,10,16,.45);
+  }
+
+  /* ---- ТЁПЛЫЕ СВЕТОВЫЕ ПЯТНА НА СТОЛЕ: X точно совпадает со свечами ---- */
+  .warm-pool{
+    position:absolute;
+    top:50%;
+    width:calc(var(--tw)*0.5);
+    height:calc(var(--th)*0.42);
+    pointer-events:none;
+    z-index:12;
+    opacity:.14;
+    filter:blur(14px);
+    background:radial-gradient(ellipse 50% 46% at 50% 50%, var(--candle) 0%, rgba(245,197,66,.5) 45%, rgba(245,197,66,0) 72%);
+    animation:poolFlicker 3.7s ease-in-out infinite;
+  }
+  .warm-pool.left { left:calc(var(--tcx) + var(--cand-inset));            transform:translate(-50%,-50%); }
+  .warm-pool.right{ left:calc(100vw - var(--tcx) - var(--cand-inset));    transform:translate(-50%,-50%);
+                    animation-delay:-1.4s; animation-duration:4.3s; }
+  /* этап 4.2: стол центрирован flex-колонкой (не absolute top:50%) — вертикаль
+     пятен и свечей задаёт JS (syncRoomDeco) по факту позиции стола; здесь только
+     снятие старых bottom/top-привязок к центру вьюпорта */
+  #scene.table-centered .warm-pool{ bottom:auto; }
+  #scene.table-centered .candle{ bottom:auto; }
+  @keyframes poolFlicker{
+    0%,100%{ opacity:.14; }
+    30%    { opacity:.115; }
+    55%    { opacity:.15; }
+    78%    { opacity:.125; }
+  }
+
+  /* ---- СВЕЧИ: уровень комнаты (НЕ переворачиваются), у передних углов.
+     Этап 4.2: стол центрирован flex-колонкой; нижняя кромка грани с учётом
+     покой-наклона rotateX(10deg) — cos(10°)=0.9848. */
+  .candle{
+    position:absolute;
+    bottom:calc(50vh - var(--face-h, var(--th))/2*0.9848 - 10px); /* основание слегка перекрывает кант стола */
+    z-index:14;                             /* выше стола */
+    width:70px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    pointer-events:none;
+  }
+  .candle.left { left:calc(var(--tcx) + var(--cand-inset));         transform:translateX(-50%); }
+  .candle.right{ left:calc(100vw - var(--tcx) - var(--cand-inset)); transform:translateX(-50%); }
+
+  /* огненная аура вокруг пламени */
+  .glow{
+    position:absolute;
+    top:-58px;
+    width:150px;
+    height:150px;
+    border-radius:50%;
+    background:radial-gradient(circle, rgba(245,197,66,.35) 0%, rgba(245,197,66,.12) 42%, rgba(245,197,66,0) 70%);
+    animation:glowPulse 2.9s ease-in-out infinite;
+  }
+  @keyframes glowPulse{
+    0%,100%{ opacity:.85; transform:scale(1); }
+    40%    { opacity:.6;  transform:scale(.93); }
+    70%    { opacity:.95; transform:scale(1.06); }
+  }
+
+  .flame-wrap{
+    position:relative;
+    width:26px;
+    height:44px;
+    transform-origin:bottom center;
+    animation:flameDance 1.9s ease-in-out infinite;
+  }
+  .candle.right .flame-wrap{ animation-duration:2.3s; animation-delay:-.7s; }
+  @keyframes flameDance{
+    0%,100%{ transform:scale(1,1) rotate(-1.5deg); }
+    22%    { transform:scale(.94,1.06) rotate(1.2deg); }
+    47%    { transform:scale(1.05,.93) rotate(-2deg); }
+    68%    { transform:scale(.97,1.03) rotate(.8deg); }
+    84%    { transform:scale(1.02,.97) rotate(-.6deg); }
+  }
+  .flame{
+    position:absolute;
+    left:50%;
+    bottom:0;
+    width:18px;
+    height:36px;
+    transform:translateX(-50%);
+    border-radius:50% 50% 46% 46% / 68% 68% 32% 32%;
+    background:linear-gradient(180deg, var(--candle-hi) 0%, var(--candle) 46%, var(--wax) 100%);
+    filter:blur(.4px);
+    animation:flameFlicker 1.3s ease-in-out infinite;
+  }
+  .candle.right .flame{ animation-duration:1.1s; animation-delay:-.4s; }
+  @keyframes flameFlicker{
+    0%,100%{ opacity:1;   transform:translateX(-50%) scale(1,1); }
+    25%    { opacity:.82; transform:translateX(-50%) scale(.92,1.08); }
+    50%    { opacity:.95; transform:translateX(-50%) scale(1.05,.9); }
+    75%    { opacity:.78; transform:translateX(-50%) scale(.9,1.02); }
+  }
+  .flame-core{
+    position:absolute;
+    left:50%;
+    bottom:2px;
+    width:8px;
+    height:16px;
+    transform:translateX(-50%);
+    border-radius:50% 50% 40% 40% / 60% 60% 40% 40%;
+    background:radial-gradient(ellipse at 50% 70%, var(--candle-hi) 0%, rgba(255,248,231,.6) 60%, rgba(255,248,231,0) 100%);
+    animation:coreFlicker 1.3s ease-in-out infinite reverse;
+  }
+  @keyframes coreFlicker{
+    0%,100%{ opacity:.95; transform:translateX(-50%) scale(1); }
+    50%    { opacity:.6;  transform:translateX(-50%) scale(.85,.92); }
+  }
+
+  .wick{
+    width:3px;
+    height:7px;
+    background:linear-gradient(180deg, #0a0d11, var(--ink));
+    border-radius:1px;
+  }
+  .wax-body{
+    width:34px;
+    height:86px;
+    border-radius:6px 6px 4px 4px;
+    background:linear-gradient(90deg,
+      var(--bone) 0%,
+      #f4ecd9 30%,
+      var(--bone) 62%,
+      #cbbda2 100%);
+    box-shadow:
+      inset 0 -18px 22px rgba(5,10,16,.4),
+      inset 3px 0 6px rgba(5,10,16,.18),
+      0 4px 12px var(--shadow-cold);
+    position:relative;
+  }
+  /* потёк воска — капля цвета wаx у основания */
+  .wax-body::after{
+    content:"";
+    position:absolute;
+    left:4px;
+    top:14px;
+    width:7px;
+    height:34px;
+    border-radius:4px;
+    background:linear-gradient(180deg, rgba(232,220,200,.9), var(--wax));
+    opacity:.55;
+  }
+  .holder{
+    width:56px;
+    height:12px;
+    border-radius:50%;
+    background:linear-gradient(180deg, var(--wood-edge) 0%, var(--wood-base) 90%);
+    box-shadow:0 5px 10px var(--shadow-cold), inset 0 1px 0 rgba(159,180,200,.25);
+    margin-top:-2px;
+  }
+  /* тень свечи на столе */
+  .candle-shadow{
+    width:80px;
+    height:14px;
+    border-radius:50%;
+    background:radial-gradient(ellipse, rgba(5,10,16,.5) 0%, rgba(5,10,16,0) 70%);
+    margin-top:2px;
+  }
+
+  /* ---- ПЫЛЬ-ЧАСТИЦЫ ---- */
+  .mote{
+    position:absolute;
+    width:3px;
+    height:3px;
+    border-radius:50%;
+    background:var(--dust);
+    opacity:.12;
+    pointer-events:none;
+    z-index:8;
+    animation:moteDrift linear infinite;
+  }
+  @keyframes moteDrift{
+    0%   { transform:translate(0,0); }
+    25%  { transform:translate(14px,-26px); }
+    50%  { transform:translate(-8px,-52px); }
+    75%  { transform:translate(10px,-80px); }
+    100% { transform:translate(0,-110px); }
+  }
+
+  .playzone{flex:1;min-height:0}
+
+  /* ============ КАРТЫ: рубашка/лицо, рука-веер ============ */
+  /* Двусторонняя карта без preserve-3d: обе грани в DOM, backface-visibility:hidden.
+     В перевёрнутой battle-грани (rotateX 180) движок некорректно пробивает
+     hit-testing сквозь hidden-backface слои — поэтому front лежит ПОД back,
+     а .flipped просто скрывает back (opacity), открывая front. Клики всегда
+     доходят до узла карты — делегирование работает честно. */
+  .card{
+    position:relative;
+    width:180px;
+    height:250px;
+    flex:0 0 auto;
+    cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+    transform:translate(var(--dx,0), var(--dy,0)) rotate(var(--rot,0deg));
+    transition:transform .5s cubic-bezier(.2,.7,.3,1);
+    transition-delay:calc(var(--i,0) * 120ms);   /* раздача — стаггером */
+  }
+  .card-inner{
+    position:absolute;
+    inset:0;
+  }
+  .card-face{
+    position:absolute;
+    inset:0;
+    border-radius:10px;
+    backface-visibility:hidden;
+    -webkit-backface-visibility:hidden;
+    overflow:hidden;
+    transition:transform .45s cubic-bezier(.4,.1,.2,1), opacity .45s ease;
+  }
+  /* рубашка сверху; при .flipped уходит с лёгким Y-доворотом -> честный флип без каши */
+  .card-back{ z-index:2; }
+  .card.flipped .card-back{
+    opacity:0;
+    transform:rotateY(90deg);
+    pointer-events:none;
+  }
+  /* лицо снизу, изначально повёрнуто на 180 (невидимо по backface), при .flipped встаёт */
+  .card-front{
+    z-index:1;
+    transform:rotateY(180deg);
+  }
+  .card.flipped .card-front{ transform:rotateY(0deg); }
+  /* --- ЛИЦО: пергамент, двойная рамка --ink, одна гравюра, лента типа, название --- */
+  .card-front{
+    background:linear-gradient(160deg, var(--parchment-a) 0%, var(--parchment-b) 100%);
+    box-shadow:inset 0 0 0 1px rgba(36,26,16,.2), 0 6px 16px rgba(5,10,16,.45);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    padding:10px;
+    transform-style:flat;   /* текст не уходит в зеркало при rotateY */
+  }
+  .card-front::before{          /* внешняя рамка 2px */
+    content:"";
+    position:absolute;
+    inset:5px;
+    border:2px solid var(--ink);
+    border-radius:6px;
+    pointer-events:none;
+  }
+  .card-front::after{           /* внутренняя рамка 1px с отступом 4px */
+    content:"";
+    position:absolute;
+    inset:11px;
+    border:1px solid var(--ink);
+    border-radius:4px;
+    pointer-events:none;
+  }
+  .card-icon{
+    width:56px;
+    height:56px;
+    margin-top:6px;
+    display:block;
+  }
+  .card-type{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    opacity:.9;
+  }
+  .card-type .bar{
+    width:26px;
+    height:3px;
+    border-radius:2px;
+    background:var(--tc,var(--candle));
+    box-shadow:0 0 6px var(--tc,var(--candle));
+  }
+  .card-type .tl{
+    font-size:14px;
+    letter-spacing:.24em;
+    color:var(--ink);
+    opacity:.75;
+  }
+  .card-name{
+    font-family:'IM Fell English SC', Georgia, serif;
+    font-size:21px;
+    line-height:1.25;
+    text-align:center;
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--ink);
+    max-width:150px;
+  }
+  /* --- РУБАШКА: --ink, тонкая рамка --bone .25, сургучный сигил-свеча --- */
+  .card-back{
+    background:radial-gradient(circle at 50% 38%, #33261a 0%, var(--ink) 72%);
+    box-shadow:0 6px 16px rgba(5,10,16,.45);
+  }
+  .card-back::before{
+    content:"";
+    position:absolute;
+    inset:7px;
+    border:1px solid rgba(232,220,200,.25);
+    border-radius:6px;
+  }
+  .seal{
+    position:absolute;
+    left:50%;
+    top:50%;
+    width:66px;
+    height:66px;
+    transform:translate(-50%,-50%);
+    border-radius:50%;
+    background:radial-gradient(circle at 38% 32%, #a8433b 0%, var(--wax) 55%, #6e2420 100%);
+    box-shadow:inset 0 -4px 8px rgba(5,10,16,.4), 0 2px 6px rgba(5,10,16,.5);
+  }
+  .seal svg{
+    position:absolute;
+    left:50%;
+    top:50%;
+    width:34px;
+    height:34px;
+    transform:translate(-50%,-50%);
+    display:block;
+  }
+
+  /* --- Рука: ровный ряд лежащих карт у ближней кромки (без дуги-веера) --- */
+  /* Плоская рука (без rotateX): preserve-3d-слои карт внутри перевёрнутой
+     battle-грани ломают hit-testing движка; подъём и так даёт lift/scale. */
+  .hand{
+    position:absolute;            /* свисает с ближней кромки: нижняя треть карт за столом, над кантом */
+    left:0; right:0; bottom:-46px;
+    z-index:8;                    /* выше канта и поверхности, НО ниже доски/полосы (9): они не перекрываются рукой */
+    display:flex;
+    justify-content:center;
+    align-items:flex-end;
+    gap:12px;                     /* этап 4.1: ровный ряд вместо перекрытия -18px */
+    padding:0 18px;
+    min-height:270px;             /* резерв под карты: ряд не рвёт face при ресайзе */
+    pointer-events:auto;
+    transform-style:flat;
+  }
+  /* тень под свисающими картами — свисание читается как объём */
+  .hand .card:not(.in-slot){
+    filter:drop-shadow(0 10px 24px rgba(5,10,16,.5));
+  }
+  .card.dealt{
+    transition:transform .2s ease;   /* hover/тап — быстрый подъём, delay только при раздаче */
+    transition-delay:0s;
+  }
+  .card.dealt:hover,
+  .card.dealt.lift{
+    transform:translate(var(--dx,0), calc(var(--dy,0) - 14px)) rotate(var(--rot,0deg)) scale(1.04);
+    z-index:9;
+  }
+  /* selected — тёплое свечение подсвеченной карты Inscryption (box-shadow допустим) */
+  .card.selected .card-face{
+    box-shadow:
+      0 0 0 3px var(--candle),
+      0 0 26px rgba(245,197,66,.45),
+      0 6px 16px rgba(5,10,16,.45);
+  }
+  /* shake: ±6px, 3 цикла; только translateX в keyframes -> не конфликтует с hover-подъёмом */
+  .card.shake{ animation:cardShake .3s ease-in-out 0s 3; }
+  @keyframes cardShake{
+    0%,100%{ transform:translateX(0); }
+    25%    { transform:translateX(-6px); }
+    75%    { transform:translateX(6px); }
+  }
+
+  /* ============ ВЕРХНЯЯ ПАНЕЛЬ ============ */
+  #topbar{
+    position:fixed;
+    top:0;
+    left:0;
+    right:0;
+    z-index:50;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+    padding:14px 22px;
+    background:linear-gradient(180deg, rgba(5,8,12,.72) 0%, rgba(5,8,12,.35) 70%, rgba(5,8,12,0) 100%);
+  }
+  #topbar h1{
+    font-size:clamp(15px, 2.4vw, 24px);
+    font-weight:normal;
+    letter-spacing:.14em;
+    color:var(--bone);
+    text-shadow:0 0 18px rgba(245,197,66,.22), 0 2px 4px rgba(5,10,16,.6);
+    white-space:nowrap;
+  }
+  #topbar h1 .sub{
+    display:block;
+    font-size:.55em;
+    letter-spacing:.3em;
+    color:var(--dust);
+    opacity:.75;
+    margin-top:3px;
+  }
+  .btn-row{ display:flex; gap:10px; flex-wrap:wrap; }
+
+  .btn{
+    font-family:inherit;
+    font-size:20px;
+    letter-spacing:.06em;
+    padding:9px 16px;
+    color:var(--ink);
+    background:linear-gradient(160deg, var(--parchment-a) 0%, var(--parchment-b) 100%);
+    border:1px solid rgba(36,26,16,.45);
+    border-radius:4px;
+    cursor:pointer;
+    box-shadow:0 3px 0 rgba(36,26,16,.35), 0 6px 14px var(--shadow-cold);
+
+  }
+  .btn:hover{ transform:translateY(-1px); }
+  .btn:active{ transform:translateY(1px) scale(.98); opacity:.9; }
+  .btn.muted{
+    color:var(--bone);
+    background:linear-gradient(160deg, var(--wood-plank2) 0%, var(--wood-base) 100%);
+    border-color:var(--wood-edge);
+  }
+
+  /* отладочная подсказка внизу */
+  #hint{
+    position:fixed;
+    bottom:10px;
+    left:50%;
+    transform:translateX(-50%);
+    z-index:50;
+    font-size:12px;
+    letter-spacing:.18em;
+    color:var(--dust);
+    opacity:.4;
+    pointer-events:none;
+    white-space:nowrap;
+  }
+
+  /* на узких экранах доска врага чуть сжимается, кегль остаётся крупным:
+     не ниже 24px (шаблон) и 20px (объяснение) — этап 3.9/4.1;
+     карты руки чуть уже при нужде (clamp), ряд не вылезает за кант */
+  @media (max-width:1100px){
+    .eb-sentence{ font-size:24px; }
+    .eb-clue{ font-size:26px; }
+    .slot-box{ width:140px; height:92px; }
+    .in-slot{ width:140px !important; height:92px !important; }
+    .in-slot .card-name{ max-width:118px; font-size:20px; }
+    .slot-label{ font-size:20px; }
+    .explain-inner .fixed-line{ font-size:24px; }
+    .explain-inner .why-line{ font-size:20px; }
+    .hand{ gap:10px; }
+    .hand .card:not(.in-slot){ width:clamp(112px, 17vw, 180px); }
+    .hand .card:not(.in-slot) .card-name{ font-size:clamp(20px, 2vw, 21px); max-width:none; }
+  }
+
+  @media (max-width:640px){
+    #topbar{ padding:10px 12px; }
+    #topbar h1{ white-space:normal; }
+    .candle .wax-body{ height:64px; }
+  }
+
+  /* ============ ЭТАП 3/4: БОЙ — дух, доска-надпись врага, слоты, HP-свечи, оверлеи ============ */
+  /* Дух: гравюрный силуэт + имя — верхний элемент flex-колонки комнаты (этап 4.2),
+     сразу над дальней кромкой стола; не переворачивается, из потока не выпадает */
+  .ghost{
+    position:relative; left:auto; bottom:auto;
+    flex:0 0 auto;
+    margin-bottom:10px;
+    display:flex; flex-direction:column; align-items:center; gap:2px;
+    pointer-events:none; z-index:15;               /* слой комнаты: выше стола, ниже виньетки */
+    opacity:0; transition:opacity .5s ease;
+  }
+  body.battle-active .ghost{ opacity:1; }          /* видно только на грани боя */
+  .ghost-icon{ width:44px; height:44px; display:block; filter:drop-shadow(0 0 8px rgba(159,180,200,.3)); }
+  .ghost-name{
+    font-size:26px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--bone); opacity:.9; white-space:nowrap;
+    text-shadow:0 0 12px rgba(159,180,200,.35), 0 2px 4px rgba(5,10,16,.7);
+  }
+  /* изгнание: дух тускнеет */
+  .ghost.banished{ opacity:.5; }
+
+  /* ДОСКА-НАДПИСЬ ВРАГА: растянутая на всю половину противника, без поворота.
+     ВНУТРИ .face-battle (этап 3.9): лежит НА дальней половине столешницы, целиком
+     внутри канта, и уезжает вместе с гранью при перевороте стола (F). */
+  .enemy-board-slot{
+    position:absolute; top:7%; left:50%;           /* ВНУТРИ .face-battle: лежит НА дальней половине столешницы */
+    width:92%;
+    transform:translateX(-50%);                    /* без поворота — читаемость; уезжает вместе с гранью при F */
+    z-index:9;                                     /* над рукой (8): сыгранная мини-карта поверх кантов соседей; под виньеткой (10) */
+    opacity:0; pointer-events:none;
+    transition:opacity .45s ease;
+  }
+  body.battle-active .enemy-board-slot{ opacity:1; }
+  .enemy-board{
+    position:relative;                             /* якорь для прибитой улики и уголков */
+    width:100%;                                    /* 92% грани = ~92% ширины столешницы */
+    height:auto; min-height:clamp(200px, 24vh, 260px);
+    display:flex; flex-direction:column; align-items:center;
+    padding:clamp(20px, 3vh, 28px) 26px 12px;
+    border-radius:6px;
+    background:linear-gradient(160deg, var(--parchment-a) 0%, var(--parchment-b) 100%);
+    box-shadow:
+      inset 0 0 0 2px var(--ink),                  /* внешняя рамка двойной рамки */
+      inset 0 0 0 3px rgba(216,201,168,0),
+      inset 0 0 0 4px var(--ink),                  /* внутренняя рамка (отступ ~4px) */
+      inset 0 0 34px rgba(36,26,16,.16),
+      0 26px 46px rgba(5,10,16,.55);               /* тень ПОД доской */
+    animation:boardToss .55s cubic-bezier(.2,.7,.3,1);
+  }
+  @keyframes boardToss{                                /* дух «швыряет» доску на стол */
+    0%   { opacity:0; transform:translateY(-46px) scale(1.06); }
+    60%  { opacity:1; }
+    100% { opacity:1; transform:translateY(0) scale(1); }
+  }
+  .enemy-board.flash{ animation:boardFlash .5s ease; } /* вспышка --candle на удар */
+  @keyframes boardFlash{
+    0%,100%{ box-shadow:inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--ink),
+               inset 0 0 34px rgba(36,26,16,.16), 0 26px 46px rgba(5,10,16,.55); }
+    35%    { box-shadow:0 0 0 4px var(--candle), 0 0 46px rgba(245,197,66,.75),
+               inset 0 0 0 2px var(--ink), inset 0 0 0 4px var(--ink); }
+  }
+  /* доска гаснет вместе с духом после 2 удара */
+  .enemy-board-slot.banished{ opacity:.5; }
+
+  /* сургучные уголки --wax */
+  .eb-corner{
+    position:absolute; width:22px; height:22px; border-radius:50%;
+    background:radial-gradient(circle at 38% 32%, #a8433b 0%, var(--wax) 55%, #6e2420 100%);
+    box-shadow:inset 0 -2px 4px rgba(5,10,16,.4), 0 2px 4px rgba(5,10,16,.45);
+  }
+  .eb-corner.tl{ left:9px;  top:9px;  }
+  .eb-corner.tr{ right:9px; top:9px;  }
+  .eb-corner.bl{ left:9px;  bottom:9px; }
+  .eb-corner.br{ right:9px; bottom:9px; }
+
+  /* табличка-улика: прибита СВЕРХУ ПО ЦЕНТРУ ДОСКИ (внутри доски — не выходит за
+     кант стола и не обрезается сверху, этап 3.9); НЕ перекрывается ничем */
+  .eb-clue{
+    position:absolute; left:50%; top:6px;
+    transform:translateX(-50%);
+    z-index:3;
+    border:2px solid var(--candle);
+    border-radius:4px;
+    background:linear-gradient(160deg, var(--parchment-a) 0%, var(--parchment-b) 100%);
+    box-shadow:0 0 12px rgba(245,197,66,.35), 0 4px 10px rgba(5,10,16,.5);
+    color:var(--ink);
+    font-size:clamp(26px, 2.4vw, 30px); letter-spacing:.06em; text-transform:uppercase;
+    padding:6px 18px;
+    white-space:nowrap;
+  }
+  .eb-clue::before{ /* "гвоздик" */
+    content:""; position:absolute; left:50%; top:-7px;
+    transform:translateX(-50%);
+    width:7px; height:7px; border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #b8564d, var(--wax) 70%);
+  }
+  /* этап 4.1: улика — РЕЛИКТ "Лупа". По умолчанию НЕ рендерится (hidden),
+     табличка появляется только при включённом реликте; сигил семьи остаётся всегда */
+  .eb-clue[hidden]{ display:none; }
+
+  /* этап 4.1: сигил семьи времени — гравюрная иконка 40-48px --ink СПРАВА от шаблона */
+  .eb-seal{
+    flex:0 0 auto;
+    margin-left:22px;
+    align-self:center;
+    opacity:.9;
+  }
+  .eb-seal svg{
+    width:clamp(40px, 4vw, 48px);
+    height:clamp(40px, 4vw, 48px);
+    display:block;
+    fill:none;
+    stroke:var(--ink);
+    stroke-width:1.7;
+    stroke-linecap:round;
+    stroke-linejoin:round;
+  }
+
+  /* предложение-шаблон: одна-две строки, inline-пропуски [M]/[V] */
+  .eb-sentence{
+    flex:1;
+    display:flex; flex-direction:row; flex-wrap:wrap;
+    align-items:center; justify-content:center;
+    gap:8px 4px;
+    margin-top:clamp(56px, 7vh, 66px);             /* отступ под прибитую улику (теперь внутри доски) */
+    color:var(--ink);
+    font-family:'IM Fell English SC', Georgia, serif;
+    font-size:clamp(34px, 3.2vw, 40px); line-height:1.6; letter-spacing:.03em;
+    text-align:center;
+  }
+  .eb-sentence > .eb-word{ white-space:nowrap; }
+  .slot-box{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:170px; height:110px;                     /* пропорция мини-карты */
+    border:2px dashed rgba(232,220,200,.6);        /* пунктир --bone opacity .6 */
+    border-radius:8px;
+    vertical-align:middle;
+    margin:0 12px;
+    background:rgba(216,201,168,.28);
+    overflow:hidden;
+    flex:0 0 auto;
+  }
+  .slot-label{
+    font-size:20px; letter-spacing:.14em;
+    color:var(--bone); opacity:.5;
+    font-family:'IM Fell English SC', Georgia, serif;
+  }
+  .slot-box.shake{ animation:slotShake .3s ease-in-out 0s 3; }
+  @keyframes slotShake{
+    0%,100%{ transform:translateX(0); }
+    25%    { transform:translateX(-6px); }
+    75%    { transform:translateX(6px); }
+  }
+
+  /* сыгранная мини-карта: точно 170x110 ВНУТРИ слота — тот же пергамент,
+     двойная рамка, лента типа + текст 20-22px, БЕЗ иконки */
+  .in-slot{
+    width:170px !important; height:110px !important;
+    flex:0 0 auto; cursor:default;
+    transform:none !important; transition:none;
+    filter:none;
+  }
+  .in-slot .card-inner{ position:absolute; inset:0; }
+  .in-slot .card-back{ display:none; }
+  .in-slot .card-front{
+    position:absolute; inset:0; transform:rotateY(0deg);
+    border-radius:8px;
+    box-shadow:0 2px 8px rgba(5,10,16,.45);
+    justify-content:center; gap:6px; padding:8px;
+  }
+  .in-slot .card-front::before{ inset:4px;  }
+  .in-slot .card-front::after { inset:9px;  }
+  .in-slot .card-icon{ display:none; }
+  .in-slot .card-name{ font-size:21px; max-width:150px; margin:0; }
+
+  /* ПОЛОСА ОБЪЯСНЕНИЯ: видна ВО ВРЕМЯ боя, место зарезервировано (layout не прыгает).
+     ВНУТРИ .face-battle (этап 3.9): сразу под доской на дальней половине стола;
+     уезжает вместе с гранью при перевороте; рука её физически не перекрывает. */
+  .explain{
+    position:absolute; left:50%; top:41%;          /* под доской (7%..~38%), выше середины стола */
+    width:92%;
+    transform:translateX(-50%);
+    z-index:9;                                     /* как доска: полоса никогда не перекрывается рукой (8) */
+    pointer-events:none;
+  }
+  .explain-inner{
+    width:100%;
+    min-height:64px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:6px;
+    padding:10px 24px;
+    border-radius:6px;
+    background:linear-gradient(160deg, rgba(216,201,168,.9) 0%, rgba(196,178,140,.86) 100%);
+    box-shadow:inset 0 0 0 1px rgba(36,26,16,.35), 0 14px 30px rgba(5,10,16,.5);
+    text-align:center;
+    opacity:0; transition:opacity .4s ease;
+  }
+  .explain-inner.show{ opacity:1; }
+  .explain-inner .fixed-line{
+    font-family:'IM Fell English SC', Georgia, serif;
+    font-size:clamp(28px, 2.6vw, 32px); line-height:1.4; letter-spacing:.04em; color:var(--ink);
+  }
+  .explain-inner .fixed-line .ins{
+    color:var(--wax); font-weight:bold;
+    text-shadow:0 0 8px rgba(245,197,66,.55);
+  }
+  .explain-inner .why-line{
+    font-size:clamp(22px, 2vw, 26px); line-height:1.45;
+    letter-spacing:.03em; color:#4a3a24;
+  }
+
+  /* HP: ряд свечей команды — этап 4.2: ВНЕ стола, flex-элемент колонки комнаты
+     ПОСЛЕ .table-anchor: физически стоит в свободной тёмной зоне под столом
+     (между нижней кромкой и подсказкой), перекрыть его рукой/кантом невозможно. */
+  .hp-row{
+    position:relative; left:auto; bottom:auto; transform:none;
+    flex:0 0 auto;
+    display:flex; gap:12px; justify-content:center;
+    padding:10px 0 6px;
+    z-index:15; pointer-events:none; /* слой комнаты: выше стола, ниже виньетки */
+    transition:opacity .4s ease;
+  }
+  body.table-map-side .hp-row{ opacity:0; } /* видно только на грани боя */
+  body.battle-active .hp-row{ opacity:1; }
+  /* этап 4.2 п.4: при нехватке высоты жмём padding, иконки остаются ≥30px */
+  #scene.hp-tight .hp-row{ padding:4px 0 2px; }
+  #scene.hp-tight .hp-candle{ width:30px; height:40px; }
+  .hp-candle{ width:36px; height:48px; display:block; } /* ≥34px высотой */
+  .hp-candle .hp-stroke{ stroke:var(--candle); }
+  .hp-candle:not(.out){ filter:drop-shadow(0 0 8px rgba(245,197,66,.45)); }
+  .hp-candle.out .hp-stroke{ stroke:var(--bone); opacity:.25; } /* погасшие — серые силуэты */
+  .hp-candle .hp-flame{ fill:var(--candle); }
+  .hp-candle.out .hp-flame{ fill:var(--bone); opacity:.2; }
+  .hp-candle.goout{ animation:hpOut .5s ease forwards; }
+  @keyframes hpOut{
+    0%   { opacity:1; transform:scale(1); }
+    30%  { opacity:1; transform:scale(1.12); }
+    100% { opacity:.4; transform:scale(.94); }
+  }
+
+  /* оверлей-свиток: изгнание / поражение */
+  .overlay{
+    position:fixed; inset:0; z-index:55;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(5,8,12,.6);
+    opacity:0; pointer-events:none;
+    transition:opacity .4s ease;
+  }
+  .overlay.show{ opacity:1; pointer-events:auto; }
+  .scroll-panel{
+    position:relative; z-index:1; /* ЭТАП 6.3: контекст наложения — кнопка с z-index:2 выше подложки */
+    width:min(620px, 86vw);
+    padding:34px 40px 30px;
+    border-radius:8px;
+    background:linear-gradient(160deg, var(--parchment-a) 0%, var(--parchment-b) 100%);
+    box-shadow:0 0 0 2px var(--ink), inset 0 0 0 1px rgba(36,26,16,.2),
+      inset 0 0 46px rgba(36,26,16,.14), 0 26px 60px rgba(5,10,16,.6);
+    text-align:center;
+    transform:translateY(14px) scale(.97);
+    transition:transform .4s cubic-bezier(.2,.7,.3,1);
+  }
+  .overlay.show .scroll-panel{ transform:none; }
+  .scroll-panel h2{
+    font-weight:normal; font-size:38px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--ink);
+  }
+  .scroll-panel .sp-rule{
+    width:70px; height:2px; margin:12px auto 14px;
+    background:var(--ink); opacity:.4;
+  }
+  .scroll-panel .sp-phrase{ font-size:28px; color:var(--ink); line-height:1.4; }
+  .scroll-panel .sp-phrase .ins{ color:var(--wax); font-weight:bold; }
+  .scroll-panel .sp-why{ font-size:24px; color:var(--ink); opacity:.8; margin-top:12px; line-height:1.5; }
+  /* ЭТАП 6.2 ЧАСТЬ A(3): кнопка оверлея — гарантированно кликабельна:
+     pointer-events:auto, position:relative + z-index выше подложки панели. */
+  .scroll-panel .btn{ margin-top:20px; font-size:20px; pointer-events:auto; position:relative; z-index:2; }
