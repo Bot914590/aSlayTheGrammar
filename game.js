@@ -13,7 +13,7 @@ var VOLUME = 0.2;
 var unlocked = false;
 
 function ensureAudio(){
-  if(!unlocked) return false;   // до первого жеста — не создаём контекст
+  if(!unlocked) return false;
   if(audioCtx) return true;
   var AC = window.AudioContext || window.webkitAudioContext;
   if(!AC) return false;
@@ -29,7 +29,6 @@ function ensureAudio(){
   return true;
 }
 
-// один короткий осциллятор: тон, тип, старт(сек от now), длительность, частотный glide
 function tone(freq, type, delay, dur, glideTo, peak){
   if(!audioCtx || !masterGain) return;
   var t0 = audioCtx.currentTime + delay;
@@ -50,7 +49,6 @@ function tone(freq, type, delay, dur, glideTo, peak){
   osc.stop(t0 + dur + 0.05);
 }
 
-// шумовой всплеск (для выдоха свечи)
 function noiseBurst(delay, dur, cutoffFreq, peak){
   if(!audioCtx || !masterGain) return;
   var t0 = audioCtx.currentTime + delay;
@@ -75,36 +73,35 @@ function noiseBurst(delay, dur, cutoffFreq, peak){
   src.start(t0);
 }
 
-/* ============ playSfx(name): card, flip, hit, miss, win, candle ============ */
 function playSfx(name){
-  if(muted || !unlocked) return;   // до первого жеста — тихий no-op
+  if(muted || !unlocked) return;
   if(!ensureAudio()) return;
   if(audioCtx.state === "suspended"){
     audioCtx.resume();
   }
   switch(name){
-    case "card":   // скольжение карты по дереву
+    case "card":
       tone(320, "triangle", 0,    0.09, 210, 0.9);
       noiseBurst(0.01, 0.07, 2600, 0.35);
       break;
-    case "flip":   // щелчок переворота
+    case "flip":
       tone(660, "square", 0,   0.05, 480, 0.5);
       tone(990, "sine",   0.03,0.06, 740, 0.6);
       break;
-    case "hit":    // глухое попадание
+    case "hit":
       tone(150, "sine", 0, 0.16, 60, 1);
       noiseBurst(0, 0.08, 900, 0.5);
       break;
-    case "miss":   // промах — спад
+    case "miss":
       tone(300, "sawtooth", 0, 0.22, 120, 0.4);
       break;
-    case "win":    // победный перебор
-      tone(523.25, "sine", 0,     0.14, null, 0.8); // до
-      tone(659.25, "sine", 0.12,  0.14, null, 0.8); // ми
-      tone(783.99, "sine", 0.24,  0.16, null, 0.8); // соль
-      tone(1046.5, "triangle", 0.36, 0.34, null, 0.9); // до-октава
+    case "win":
+      tone(523.25, "sine", 0,     0.14, null, 0.8);
+      tone(659.25, "sine", 0.12,  0.14, null, 0.8);
+      tone(783.99, "sine", 0.24,  0.16, null, 0.8);
+      tone(1046.5, "triangle", 0.36, 0.34, null, 0.9);
       break;
-    case "candle": // выдох/вспышка свечи
+    case "candle":
       noiseBurst(0, 0.3, 1400, 0.5);
       tone(90, "sine", 0, 0.25, 55, 0.5);
       break;
@@ -112,13 +109,13 @@ function playSfx(name){
       break;
   }
 }
-window.playSfx = playSfx; // доступно из консоли для отладки
+window.playSfx = playSfx;
 
 /* ================= UI ================= */
 var btnSound = document.getElementById("btn-sound");
 var btnNewRun = document.getElementById("btn-newrun");
 var tableFlip = document.getElementById("tableFlip");
-var FLIP_MS = 900; // синхронно с transition .9s
+var FLIP_MS = 900;
 
 btnSound.addEventListener("click", function(){
   muted = !muted;
@@ -130,26 +127,30 @@ btnSound.addEventListener("click", function(){
     btnSound.classList.add("muted");
   }else{
     btnSound.classList.remove("muted");
-    playSfx("card"); // подтверждение включения
+    playSfx("card");
   }
 });
 
-// заглушка: игровой логики нет — только звук и лёгкая вибрация кнопки
 btnNewRun.addEventListener("click", function(){
   playSfx("card");
 });
 
-/* ================= ПЕРЕВОРОТ СТОЛА =================
-   Триггеры: только window.flipTable() (вызывает игровая логика) и клавиша F (отладка).
-   Клик по канту — убран полностью. */
+/* ================= ПЕРЕВОРОТ СТОЛА ================= */
 var flipping = false;
-var fightActive = false;   /* бой активен: дух/доска/HP видны только на грани боя */
+var fightActive = false;
 function flipTable(){
-  if(flipping) return;
+  if(flipping){
+    // Watchdog: если переворот завис дольше 1.2с, сбрасываем флаг
+    if(Date.now() - (window.__lastFlipTime || 0) > 1200){
+      flipping = false;
+    } else {
+      return;
+    }
+  }
+  window.__lastFlipTime = Date.now();
   flipping = true;
-  tableFlip.classList.add("no-pan"); // на время переворота грани глухи к кликам
+  tableFlip.classList.add("no-pan");
   tableFlip.classList.toggle("flipped");
-  /* слой комнаты (дух/HP) и боевые оверлеи грани — только на грани боя */
   var mapSide = tableFlip.classList.contains("flipped");
   document.body.classList.toggle("table-map-side", mapSide);
   document.body.classList.toggle("map-active", mapSide);
@@ -158,33 +159,25 @@ function flipTable(){
   setTimeout(function(){
     flipping = false;
     tableFlip.classList.remove("no-pan");
-    /* ЭТАП 6.5: если стол приземлился на грань карты — снимем залипший busy,
-       иначе pointerup-обработчик карты (if(state.busy) return) глушит клики
-       по следующей колонке после любого сбоя/прерванного возврата. */
+    state.busy = false;
     if(mapSide && window.clearMapBusy) window.clearMapBusy();
   }, FLIP_MS);
 }
-window.flipTable = flipTable; // для будущих этапов / игровой логики
-/* ЭТАП 6.3: мост для IIFE боя/карты — принудительно завершить переворот из
-   ЕДИНСТВЕННОЙ области, где живёт flipping (записи flipping=false в banish()/
-   travelTo() были no-op и заливали guard кнопки [Вернуться на карту]). */
+window.flipTable = flipTable;
 window.forceFlipEnd = function(){
   flipping = false;
   tableFlip.classList.remove("no-pan");
 };
 
-
-// триггер: клавиша KeyF (отладка)
 document.addEventListener("keydown", function(e){
   if(e.code === "KeyF" && !e.ctrlKey && !e.metaKey && !e.altKey){
     flipTable();
   }
 });
 
-/* ================= КАРТЫ: иконки, makeCard, рука, раздача ================= */
+/* ================= КАРТЫ ================= */
 var SVGNS = "http://www.w3.org/2000/svg";
 
-/* Набор stroke-SVG иконок (2-4 path, без заливок; гравюрный штих) */
 var ICONS = {
   candle: [
     "M10 27 h10",
@@ -224,8 +217,7 @@ var ICONS = {
   star: [
     "M16 4.5 L18.9 12.1 L27 12.4 L20.7 17.5 L23 25.5 L16 20.7 L9 25.5 L11.3 17.5 L5 12.4 L13.1 12.1 Z"
   ],
-  /* этап 4.1: сигилы семей времени для доски врага */
-  sun: [ /* simple — солнце с лучами / циферблат */
+  sun: [
     "circle:16,16,6",
     "circle:16,16,1.4",
     "M16 3.5 V7",
@@ -237,7 +229,7 @@ var ICONS = {
     "M24.8 7.2 l-2.5 2.5",
     "M9.7 22.3 l-2.5 2.5"
   ],
-  hourglass: [ /* perfect — песочные часы */
+  hourglass: [
     "M9 4 h14 M9 28 h14",
     "M11 4 c0 6 5 8 5 12 c0 -4 5 -6 5 -12",
     "M11 28 c0 -6 5 -8 5 -12 c0 4 5 6 5 12"
@@ -272,10 +264,8 @@ function buildIcon(name){
   return svg;
 }
 
-/* лента типа: полоска 3px + мелкая подпись. MARKER=--candle, VERB=--wax, RELIC=--bone */
 var TYPE_COLOR = { MARKER:"var(--candle)", VERB:"var(--wax)", RELIC:"var(--bone)" };
 
-/* makeCard({text,type,icon}) -> DOM-узел с двумя гранями; .flipped на узле = показать лицо */
 function makeCard(data){
   var card = document.createElement("div");
   card.className = "card";
@@ -284,7 +274,6 @@ function makeCard(data){
   var inner = document.createElement("div");
   inner.className = "card-inner";
 
-  /* рубашка (лицевая по умолчанию — карты сдаются рубашкой вверх) */
   var back = document.createElement("div");
   back.className = "card-face card-back";
   var seal = document.createElement("div");
@@ -307,7 +296,6 @@ function makeCard(data){
   seal.appendChild(sigil);
   back.appendChild(seal);
 
-  /* лицо: пергамент, двойная рамка, одна гравюра, лента типа, название капсом */
   var front = document.createElement("div");
   front.className = "card-face card-front";
   front.appendChild(buildIcon(data.icon || "candle"));
@@ -327,18 +315,16 @@ function makeCard(data){
   front.appendChild(typeRow);
   front.appendChild(name);
 
-  inner.appendChild(back);   /* rotateY(180) */
+  inner.appendChild(back);
   inner.appendChild(front);
   card.appendChild(inner);
   return card;
 }
-window.makeCard = makeCard; // для будущих этапов
+window.makeCard = makeCard;
 
 var handEl = document.getElementById("hand");
 
 function layoutFan(){
-  /* этап 4.1: ровный ряд без дуги — все карты вертикальны (rotate 0),
-     лёгкий случайный наклон ±1.5deg как у лежащих карт; смещение по Y убрано */
   var cards = handEl.children, n = cards.length;
   for(var i=0;i<n;i++){
     if(!cards[i].hasAttribute("data-tilt")){
@@ -349,16 +335,12 @@ function layoutFan(){
   }
 }
 
-/* делегирование: все слушатели — на контейнере руки.
-   Клик по карте руки = СЫГРАТЬ её в свой слот на карте врага (этап 3).
-   e.stopPropagation() — клики карт НИКОГДА не доходят до стола/флипа. */
 handEl.addEventListener("click", function(e){
   e.stopPropagation();
   var card = e.target.closest ? e.target.closest(".card") : null;
   if(!card) return;
   playCard(card);
 });
-/* тап = подъём (hover покрывает мышь; .lift дополняет для touch) */
 handEl.addEventListener("touchstart", function(e){
   e.stopPropagation();
   var t = e.target.closest ? e.target.closest(".card") : null;
@@ -370,13 +352,13 @@ handEl.addEventListener("touchend", function(e){
   for(var i=0;i<lifted.length;i++) lifted[i].classList.remove("lift");
 }, {passive:true});
 
-/* ================= ПЫЛЬ-ЧАСТИЦЫ (6-8 шт) ================= */
+/* ================= ПЫЛЬ-ЧАСТИЦЫ ================= */
 var scene = document.getElementById("scene");
 var MOTES = 7;
 for(var i=0;i<MOTES;i++){
   var m = document.createElement("div");
   m.className = "mote";
-  var size = 2 + (i % 3);           // 2..4 px
+  var size = 2 + (i % 3);
   m.style.width = size + "px";
   m.style.height = size + "px";
   m.style.left = (8 + Math.random()*84).toFixed(1) + "%";
@@ -386,7 +368,6 @@ for(var i=0;i<MOTES;i++){
   scene.appendChild(m);
 }
 
-/* свечи иногда «дышат» звуком — очень тихо, без речи; только после жеста */
 var AMBIENT_SOUNDS = ["candle"];
 function scheduleAmbient(){
   setTimeout(function(){
@@ -398,9 +379,6 @@ function scheduleAmbient(){
 }
 scheduleAmbient();
 
-/* ЗВУК ПО ЖЕСТУ: AudioContext создаётся лениво и только после первого
-   pointerdown/keydown. До жеста playSfx — тихий no-op (раздача до клика
-   идёт без звука — это норма, предупреждений в консоли нет). */
 function unlock(){
   unlocked = true;
   if(audioCtx && audioCtx.state === "suspended"){ audioCtx.resume(); }
@@ -432,19 +410,16 @@ var state = {
   enemyIdx: 0,
   hp: MAX_HP,
   hits: 0,
-  busy: false,          /* блокировка кликов на время анимаций/оверлеев */
-  entering: false,      /* реентри-гард диспетчера enterNode (этап 5.3) */
-  banished: false,      /* бой завершён изгнанием — ждём [Вернуться на карту] */
-  played: { M:null, V:null },   /* карты, лежащие в слотах */
-  slots:  { M:null, V:null }    /* DOM слотов */
+  busy: false,
+  entering: false,
+  banished: false,
+  played: { M:null, V:null },
+  slots:  { M:null, V:null }
 };
 
 function currentEnemy(){ return CONTENT.enemies[state.enemyIdx % CONTENT.enemies.length]; }
-/* счётчик раздач: каждая новая рука получает уникальный cid — защита от
-   наложений stale-таймаутов предыдущих раздач на новые карты */
 var dealSeq = 0;
 
-/* ---------- HP-свечи ---------- */
 function buildHpRow(){
   hpRowEl.innerHTML = "";
   for(var i=0;i<MAX_HP;i++){
@@ -483,8 +458,6 @@ function snuffHp(){
   }
 }
 
-/* этап 4.1: улика — РЕЛИКТ "Лупа". По умолчанию выключен: табличка не рендерится,
-   на доске только шаблон + сигил семьи времени. Тумблер [Лупа] на верхней панели. */
 var lupaOn = false;
 
 function renderClue(enemy){
@@ -497,20 +470,15 @@ function renderClue(enemy){
   }
 }
 
-/* ---------- доска-надпись врага: шаблон с inline-пропусками + сигил семьи ---------- */
 function buildEnemyBoard(enemy){
   state.slots.M = null; state.slots.V = null;
-
-  /* переиспользуем статичную разметку доски из HTML */
   boardSlotEl.classList.remove("banished");
   boardEl.classList.remove("flash");
   ghostEl.classList.remove("banished");
-  renderClue(enemy);   /* этап 4.1: по умолчанию скрыта (реликт "Лупа") */
+  renderClue(enemy);
 
-  /* предложение-шаблон: слова + слоты [M]/[V] (170x110, пунктир) в одну-две строки */
   ebSentenceEl.innerHTML = "";
   var parts = enemy.template.split(/\[(M|V)\]/);
-  /* split даёт: [pre, GROUP, mid, GROUP, post] при наличии обоих маркеров */
   var seq = [];
   for(var p=0;p<parts.length;p++){
     if(p % 2 === 0){
@@ -537,64 +505,51 @@ function buildEnemyBoard(enemy){
       state.slots[seq[s].kind] = box;
     }
   }
-  /* этап 4.1: сигил семьи времени — гравюра СПРАВА от шаблона (не слот, не трогает проверку) */
   var seal = document.createElement("span");
   seal.className = "eb-seal";
   seal.setAttribute("aria-hidden", "true");
   var sealName = FAMILY_SEAL[enemy.family] || FAMILY_SEAL[norm(enemy.family).toLowerCase()] || "sun";
   var sealSvg = buildIcon(sealName);
-  sealSvg.setAttribute("class", "");   /* стиль даёт .eb-seal svg --ink-штрих */
+  sealSvg.setAttribute("class", "");
   seal.appendChild(sealSvg);
   ebSentenceEl.appendChild(seal);
-  /* рестарт анимации «швыряния» доски */
   void boardEl.offsetWidth;
   fitFaceHeights();
 }
 
-/* этап 3.9/4.2: явная высота стола в px из JS (flex-колонка комнаты).
-   Формула совпадает с исходной spec-высотой min(74vh,760px); при нехватке
-   вертикали стол ужимается так, чтобы колонка [дух → стол → HP] целиком
-   помещалась во вьюпорт без скролла и ряд HP не сталкивался с подсказкой. */
 function fitFaceHeights(){
   var h = window.innerHeight || document.documentElement.clientHeight || 760;
   var faceH = Math.max(520, Math.min(Math.round(h * 0.86), 760));
-  /* резерв колонки: дух (~100px) + HP-ряд (~72px) + зазоры + нижняя подсказка (~34px) */
   var reserve = 210;
   if (h - faceH < reserve){
     faceH = Math.max(440, h - reserve);
   }
   document.documentElement.style.setProperty("--face-h", faceH + "px");
-  /* этап 4.2 п.4: при нехватке высоты уменьшаем padding HP-ряда, но НЕ иконки (<30px) */
   var tight = (h - faceH) < 170;
   var roomEl = document.getElementById("scene");
   if (roomEl) roomEl.classList.toggle("hp-tight", tight);
   syncRoomDeco();
 }
 
-/* этап 4.2: комната стала flex-колонкой — стол больше не guaranteed top:50%.
-   Пятна света и свечи (слой комнаты, absolute) выравниваются по ФАКТИЧЕСКОЙ
-   вертикали стола; свечи стоят основанием НА нижней кромке грани (перекрывая кант). */
 function syncRoomDeco(){
   var anchor = document.querySelector(".table-anchor");
   var roomEl = document.getElementById("scene");
   if (!anchor || !roomEl) return;
-  /* до измерения глушим анимации трансформом (flameDance scale), иначе
-     offsetHeight «прыгает» между кадрами и свечи дрожат при ресайзе */
   var candles = roomEl.querySelectorAll(".candle");
   for (var i = 0; i < candles.length; i++){
     candles[i].style.transition = "none";
     candles[i].style.bottom = "auto";
-    candles[i].style.top = "-9999px";        /* вывод из потока измерения: height стабилен */
+    candles[i].style.top = "-9999px";
   }
   var r = anchor.getBoundingClientRect();
   var cy = r.top + r.height / 2;
-  var bottomY = r.bottom + Math.round((r.height / 2) * (1 - 0.9848)); /* проекция нижней кромки с наклоном */
+  var bottomY = r.bottom + Math.round((r.height / 2) * (1 - 0.9848));
   document.documentElement.style.setProperty("--face-top", Math.round(r.top) + "px");
   roomEl.classList.add("table-centered");
   roomEl.querySelectorAll(".warm-pool").forEach(function(el){ el.style.top = Math.round(cy) + "px"; });
   for (var j = 0; j < candles.length; j++){
-    var candH = candles[j].offsetHeight || 160;   /* измеряем ДО простановки top */
-    candles[j].style.top = Math.round(bottomY - candH + 14) + "px"; /* основание слегка перекрывает кант */
+    var candH = candles[j].offsetHeight || 160;
+    candles[j].style.top = Math.round(bottomY - candH + 14) + "px";
   }
 }
 
@@ -619,26 +574,24 @@ var dealWatchdog = null;
 function startFight(){
   state.busy = false;
   state.banished = false;
-  fightActive = true;                  /* бой активен: battle-active включает рендер грани боя */
+  fightActive = true;
   document.body.classList.add("battle-active");
-  if(tableFlip.classList.contains("flipped")) flipTable(); /* с карты — на грань боя */
+  if(tableFlip.classList.contains("flipped")) flipTable();
   state.hits = 0;
   state.played.M = null; state.played.V = null;
   hideBattleMsg();
   overlayWin.classList.remove("show");
   overlayLose.classList.remove("show");
   var enemy = currentEnemy();
-  fightActive = true;                  /* держим флаг/класс актуальными и при рестарте */
+  fightActive = true;
   document.body.classList.add("battle-active");
   ghostNameEl.textContent = enemy.name;
   buildHpRow();
   renderHp();
   buildEnemyBoard(enemy);
   handEl.innerHTML = "";
-  dealSeq++;                       /* глушим хвосты таймаутов предыдущей раздачи */
+  dealSeq++;
   setTimeout(function(){ dealBattleHand(enemy); }, 650);
-  /* самостраховка: через 600мс ПОСЛЕ запланованной раздачи (650мс) рука должна быть живой;
-     в норме не срабатывает — warn появляется только при реальной проблеме */
   if(dealWatchdog) clearTimeout(dealWatchdog);
   dealWatchdog = setTimeout(function(){
     dealWatchdog = null;
@@ -649,17 +602,11 @@ function startFight(){
   }, 1900);
 }
 
-/* рука: ГАРАНТИЯ 1 маркер из acceptM + 1 форма из acceptV + 2-3 трапа; face-up, стаггером.
-   Трапы берутся только те, что НЕ образуют с уже взятой верной парой скрытое решение
-   (иначе "неверный" набор карт мог бы засчитаться как удар).
-   Ключ — text карты везде: acceptM/acceptV содержат text, сравнение по norm(text);
-   НИКАКИХ find(...).text — только строки и map-функции FAM/TEXT2FAM/TEXT2TENSE. */
 function inAccept(list, t){
   var n = norm(t);
   for(var i=0;i<list.length;i++) if(norm(list[i]) === n) return true;
   return false;
 }
-/* решение = (а)+(б)+(в) — те же проверки, что в checkSlots */
 function isSolution(enemy, mText, vText){
   return inAccept(enemy.acceptM, mText) &&
          inAccept(enemy.acceptV, vText) &&
@@ -668,7 +615,6 @@ function isSolution(enemy, mText, vText){
 
 function randFrom(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 
-/* страховка пула: пустой пул = console.error + фолбэк на полный список */
 function safePool(arr, name){
   if(!arr || !arr.length){
     console.error("empty pool: " + name);
@@ -678,7 +624,6 @@ function safePool(arr, name){
 }
 
 function pickBattleCards(enemy){
-  /* верные пулы — СТРОКИ текстов (не объекты) */
   var okM = [], okV = [], i;
   for(i=0;i<CONTENT.markers.length;i++){
     if(inAccept(enemy.acceptM, CONTENT.markers[i].text)) okM.push(CONTENT.markers[i].text);
@@ -695,7 +640,6 @@ function pickBattleCards(enemy){
   else if(CONTENT.verbs.length) needV = CONTENT.verbs[0].text;
   if(!needM || !needV) throw new Error("CONTENT incomplete: no markers/verbs to deal");
 
-  /* семьи/тензы через map-функции; если чего-то нет — error + фолбэк, НО не краш */
   var famNeed   = TEXT2FAM(needM) || FAM(needM);
   var tenseNeed = TEXT2TENSE(needV);
   if(!famNeed || !tenseNeed){
@@ -706,37 +650,32 @@ function pickBattleCards(enemy){
 
   var chosen = [ { text:needM, kind:"M", fam:famNeed }, { text:needV, kind:"V", tense:tenseNeed } ];
 
-  /* трапы: маркеры чужой семьи + формы чужого тенза (исключая acceptV) */
   var traps = [];
   for(i=0;i<CONTENT.markers.length;i++){
     var mt = CONTENT.markers[i].text;
     if(norm(mt) === norm(needM)) continue;
-    if(famOfMarker(mt) === famNeed) continue;          /* только family !== famNeed */
-    /* трап-маркер не должен в паре с ВЕРНОЙ формой руки дать скрытое решение */
+    if(famOfMarker(mt) === famNeed) continue;
     if(isSolution(enemy, mt, needV)) continue;
     traps.push({ text:mt, kind:"M", fam:famOfMarker(mt) });
   }
   for(i=0;i<CONTENT.verbs.length;i++){
     var vt = CONTENT.verbs[i].text;
     if(norm(vt) === norm(needV)) continue;
-    if(inAccept(enemy.acceptV, vt)) continue;          /* исключаем acceptV */
-    if(TEXT2TENSE(vt) === tenseNeed) continue;         /* только tense !== tenseNeed */
-    /* трап-форма не должна в паре с ВЕРНЫМ маркером руки дать скрытое решение */
+    if(inAccept(enemy.acceptV, vt)) continue;
+    if(TEXT2TENSE(vt) === tenseNeed) continue;
     if(isSolution(enemy, needM, vt)) continue;
     traps.push({ text:vt, kind:"V", tense:TEXT2TENSE(vt) });
   }
   var pt = safePool(traps, "traps");
   if(pt){
     pt.sort(function(){ return Math.random() - 0.5; });
-    var nTraps = 2 + (Math.random() < 0.5 ? 0 : 1); /* 2-3 трапа */
+    var nTraps = 2 + (Math.random() < 0.5 ? 0 : 1);
     for(i=0;i<nTraps && i<pt.length;i++) chosen.push(pt[i]);
   }
-  /* перемешать порядок в руке */
   chosen.sort(function(){ return Math.random() - 0.5; });
   return chosen;
 }
 
-/* фолбэк-рука при крахе раздачи: строки напрямую, без поиска объектов */
 var FALLBACK_HAND = ["ALWAYS", "NOW", "FOR 2 YEARS", "WORKS", "IS WORKING"];
 
 function dealFallbackHand(){
@@ -744,7 +683,7 @@ function dealFallbackHand(){
   var nodes = [];
   for(var i=0;i<FALLBACK_HAND.length;i++){
     var t = FALLBACK_HAND[i];
-    var fam = TEXT2FAM(t);           // маркер <=> имеет семью в CONTENT.markers
+    var fam = TEXT2FAM(t);
     var isM = !!fam;
     var c = makeCard({
       text: t,
@@ -799,17 +738,16 @@ function dealBattleHand(enemy){
     var nodes = [];
     for(var i=0;i<picks.length;i++){
       var p = picks[i], isM = p.kind === "M";
-      /* карта создаётся НАПРЯМУЮ из строки p.text — без .find(...).text */
       var c = makeCard({
         text: p.text,
         type: isM ? "MARKER" : "VERB",
         icon: isM ? (MARKER_ICON[p.fam] || "candle") : "book"
       });
       c.setAttribute("data-kind", isM ? "M" : "V");
-      c.setAttribute("data-id", p.text);   /* ключ карты = text */
-      c.classList.add("flipped");            /* сдаётся face-up */
+      c.setAttribute("data-id", p.text);
+      c.classList.add("flipped");
       c.style.setProperty("--i", i);
-      c.style.setProperty("--dx", "140%");  /* старт: условная колода сверху-справа */
+      c.style.setProperty("--dx", "140%");
       c.style.setProperty("--dy", "-110%");
       c.style.opacity = "0";
       handEl.appendChild(c);
@@ -824,7 +762,7 @@ function dealBattleHand(enemy){
       nodes[j].setAttribute("data-cid", seq + "-" + j);
       (function(node, idx, mySeq){
         setTimeout(function(){
-          if(mySeq !== dealSeq) return;   /* устаревшая раздача — не трогаем новые карты */
+          if(mySeq !== dealSeq) return;
           playSfx("card");
           node.classList.add("dealt");
           if(idx === nodes.length - 1){
@@ -835,7 +773,6 @@ function dealBattleHand(enemy){
         }, idx * 120);
       })(nodes[j], j, seq);
     }
-    /* аварийный релиз: если стаггер не дожил (race), рука всё равно откроется */
     setTimeout(function(){
       if(seq === dealSeq && handEl.contains(nodes[nodes.length - 1])) state.busy = false;
     }, nodes.length * 120 + 700);
@@ -848,12 +785,11 @@ function dealBattleHand(enemy){
 
 function shakeEl(el){
   el.classList.remove("shake");
-  void el.offsetWidth; /* рестарт анимации классом */
+  void el.offsetWidth;
   el.classList.add("shake");
   setTimeout(function(){ el.classList.remove("shake"); }, 950);
 }
 
-/* клик по карте руки = сыграть: перелёт в СВОЙ слот (MARKER→[M], VERB→[V]) */
 function playCard(card){
   if(state.busy || state.banished) return;
   if(!card.parentNode || !card.parentNode.classList.contains("hand")) return;
@@ -862,7 +798,6 @@ function playCard(card){
   var slot = state.slots[kind];
   if(!slot) return;
   if(slot.firstChild && state.played[kind]){
-    /* слот занят — shake и возврат (карта остаётся в руке) */
     shakeEl(slot);
     shakeEl(card);
     return;
@@ -883,15 +818,12 @@ function playCard(card){
   setTimeout(function(){
     state.busy = false;
     checkSlots();
-  }, 480);   /* перелёт карты в слот (.5s) — проверка после морфа */
+  }, 480);
 }
 
-/* возврат сыгранной карты в руку (после промаха): полноразмерная, с анимацией обратного полёта */
 function returnCard(kind){
   var card = state.played[kind];
   if(!card) return;
-  /* если бой уже завершён (изгнание/поражение) — карта не возвращается в руку,
-     а удаляется: рука очищается вместе с боем */
   if(state.banished || state.hp <= 0){
     if(card.parentNode) card.parentNode.removeChild(card);
     state.played[kind] = null;
@@ -904,22 +836,13 @@ function returnCard(kind){
   slot.innerHTML = "<span class=\"slot-label\">[" + kind + "]</span>";
   card.classList.remove("in-slot");
   handEl.appendChild(card);
-  void handEl.offsetWidth;               /* рука уже посчитала веер (--rot/--dy) */
-  card.style.setProperty("--dx", "0px"); /* старт: позиция слота -> transition летит обратно */
+  void handEl.offsetWidth;
+  card.style.setProperty("--dx", "0px");
   card.style.setProperty("--dy", "0px");
   card.classList.add("dealt");
   state.played[kind] = null;
 }
 
-/* ---------- ПРОВЕРКА: оба слота заняты (data-id = text карты) ----------
-   Порядок проверок СТРОГО (ЭТАП 6.2 ЧАСТЬ B — диагноз по типу ошибки):
-     (а) norm(маркер) ∈ normSet(enemy.acceptM) — иначе diagnosis="marker":
-         "Маркер «X» (семья F1) не подходит улике духа: этот дух — семья F2,
-          его маркеры: [список acceptM]." + вкусовая строка wrongReplies ниже;
-     (б) norm(формы) ∈ normSet(enemy.acceptV) — иначе diagnosis="verb"
-         (маркер верный): "Маркер верный, но форма «Y» — семья F2;
-          улика духа просит семью F1." (acceptV не раскрывать);
-     (в) family маркера === tense формы — иначе правило дружбы с фактическими семьями. */
 function checkSlots(){
   var mCard = state.played.M, vCard = state.played.V;
   if(!mCard || !vCard) return;
@@ -929,21 +852,19 @@ function checkSlots(){
 
   var setM = normSet(enemy.acceptM);
   var setV = normSet(enemy.acceptV);
-  var okA = !!setM[norm(mText)];   /* (а) улика/маркер принят духом */
+  var okA = !!setM[norm(mText)];
   if(!okA){ landMiss("marker", enemy, mText, vText); return; }
-  var okB = !!setV[norm(vText)];   /* (б) форма принята духом */
+  var okB = !!setV[norm(vText)];
   if(!okB){ landMiss("verb", enemy, mText, vText); return; }
-  var okC = isFriendlyPairMVP(mText, vText); /* (в) семья маркера === tense формы */
+  var okC = isFriendlyPairMVP(mText, vText);
 
   if(okC){
     landHit(mText, vText, enemy);
   }else{
-    /* (а)+(б) пройдены, нарушено только (в) -> правило дружбы */
     landMiss("friendship", enemy, mText, vText);
   }
 }
 
-/* УДАР: вспышка --candle на доске, исправленная фраза + why на полосе объяснения */
 function landHit(mText, vText, enemy){
   playSfx("hit");
   state.hits++;
@@ -959,13 +880,9 @@ function landHit(mText, vText, enemy){
     if(state.hits >= HP_PER_ENEMY){
       banish(enemy, mText, vText);
     }else if(!state.banished){
-      /* дух отряхивается: слоты очищаются, карты уходят, рука пересдаётся.
-         ЭТАП 6.5: ветка живёт только если бой ЕЩЁ НЕ завершён изгнанием —
-         иначе бан на 2-м ударе гоняется вразнобой с этим хвостовым таймером
-         (двойная раздача / залипший busy ломали кнопку возврата). */
       clearSlots();
       handEl.innerHTML = "";
-      dealSeq++;                   /* новые карты не получат удары старых таймеров */
+      dealSeq++;
       dealBattleHand(currentEnemy());
     }
   }, 1100);
@@ -987,13 +904,6 @@ function clearSlots(){
   }
 }
 
-  /* Промах (ЭТАП 6.2 ЧАСТЬ B): shake слотов, карты возвращаются в руку,
-   гаснет свеча HP, объяснение = СТРУКТУРНЫЙ диагноз по типу ошибки.
-   Строка с полной фразой (подстановка пары) рендерится ТОЛЬКО на ударе и
-   в оверлее изгнания — на промахе в .explain НЕТ сыгранной пары, только диагноз:
-     "marker"     -> не тот маркер: список acceptM духа + вкусовая wrongReplies;
-     "verb"       -> маркер верный, но форма не та (acceptV НЕ раскрываем);
-     "friendship" -> правило дружбы с фактическими семьями обеих карт. */
 function missDiagHtml(kind, enemy, mText, vText){
   var famWant = enemy.family || famOfMarker(enemy.acceptM[0]) || "simple";
   if(kind === "marker"){
@@ -1013,7 +923,6 @@ function missDiagHtml(kind, enemy, mText, vText){
            "\u00BB \u2014 \u0441\u0435\u043C\u044C\u044F " + esc(tenseV) +
            "; \u0443\u043B\u0438\u043A\u0430 \u0434\u0443\u0445\u0430 \u043F\u0440\u043E\u0441\u0438\u0442 \u0441\u0435\u043C\u044C\u044E " + esc(famWant) + ".</div>";
   }
-  /* friendship: как раньше, с фактическими семьями обеих карт */
   var fam   = famOfMarker(mText) || "simple";
   var tense = TEXT2TENSE(vText) || fam;
   var want  = fam.charAt(0).toUpperCase() + fam.slice(1);
@@ -1041,8 +950,6 @@ function landMiss(diagKind, enemy, mText, vText){
   }, 620);
 }
 
-/* ИЗГНАНИЕ: 2 удара — дух тускнеет (opacity .5), доска гаснет вместе с ним,
-   оверлей-свиток; [Вернуться на карту] завершает бой и возвращает на карту */
 function banish(enemy, mText, vText){
   playSfx("win");
   state.banished = true;
@@ -1053,6 +960,7 @@ function banish(enemy, mText, vText){
   state.busy = false;
   flipping = false;
   tableFlip.classList.remove("no-pan");
+  if(btnNextEnemy) btnNextEnemy.disabled = false;
   winPhraseEl.innerHTML = fixedSentenceHtml(mText, vText, true, true);
   winWhyEl.textContent = enemy.why;
   setTimeout(function(){ overlayWin.classList.add("show"); }, 500);
@@ -1063,40 +971,36 @@ function showDefeat(){
 }
 
 var btnNextEnemy = document.getElementById("btnNextEnemy");
-/* ЭТАП 6.1: слушатель кнопки оверлея изгнания — ДЕЛЕГИРОВАНИЕМ на контейнере
-   оверлея (#overlayWin), чтобы не умирал при перерендере панели/кнопки. */
 
-/* ---------- ЭТАП 6.1: returnToMap — ЕДИНСТВЕННЫЙ возврат с грани боя на карту.
-   Все ссылки (делегированный слушатель #btnNextEnemy, debug-алиас) идут через
-   guard и эту функцию; состояние чистится здесь же. ---------- */
+function hasBattleClass(){
+  return document.body.classList.contains("battle-active");
+}
+
+/* ФИКС: Разрешаем возврат на карту всегда, когда показан оверлей победы
+   или дух изгнан или активен бой. Никаких ложных блокировок по !fightActive! */
 function canReturnToMap(){
-  var ba = document.body.classList.contains("battle-active");
-  var b  = state.banished === true;
-  var bu = !state.busy;
-  var ok = ba && b && bu;
-  console.log("[canReturnToMap] battle-active=" + ba, "banished=" + b, "busy=" + state.busy, "result=" + ok);
-  if(!ok){
-    console.warn("[return-guard] blocked:",
-      "battle-active=" + ba, "banished=" + b, "busy=" + state.busy);
-  }
+  var ba = hasBattleClass();
+  var b = state.banished;
+  var isWinShown = (overlayWin && overlayWin.classList.contains("show"));
+  var ok = isWinShown || b || ba;
+  console.log("[canReturnToMap] ba=" + ba, "fightActive=" + fightActive, "banished=" + b, "isWinShown=" + isWinShown, "result=" + ok);
   return ok;
 }
-/* ЭТАП 6.7 (тесты): программный бан для браузерного прогона цикла
-   бой → изгнание → возврат; игровой поток его не использует. */
+
 window.__testBanish = function(mText, vText){
   var enemy = currentEnemy();
   if(!enemy) return false;
   banish(enemy, mText || enemy.acceptM[0], vText || enemy.acceptV[0]);
   return true;
 };
-window.__run = run;   /* только для тестов: seed/act/num */
+window.__run = run;
 
 function returnToMap(){
   console.log("[returnToMap] called, run.inNode=", run.inNode);
+  // Защита от прострела клика в карту
+  window.__blockMapClicksUntil = Date.now() + 1200;
   var nd = run.inNode;
 
-  /* очистка боя: сначала убираем карты из DOM через clearSlots (пока ссылки живы),
-     и только потом обнуляем state.played */
   state.banished = false;
   state.hits     = 0;
   clearSlots();
@@ -1108,57 +1012,58 @@ function returnToMap(){
   ghostEl.classList.remove("banished");
   boardSlotEl.classList.remove("banished");
   hideBattleMsg();
-  overlayWin.classList.remove("show");
 
-  /* нет узла — просто возвращаемся на карту */
   if(!nd){
+    run.inNode = null;
     travelTo(null, true);
-    fightActive = false;
-    document.body.classList.remove("battle-active");
     state.busy = false;
+    fightActive = false;
+    if (typeof overlayWin !== "undefined" && overlayWin) {
+      overlayWin.classList.remove("show");
+    }
+    document.body.classList.remove("battle-active");
     return;
   }
 
-  /* босс — завершение акта */
   if(nd.type === "boss"){
     run.inNode = null;
-    fightActive = false;
-    document.body.classList.remove("battle-active");
     state.busy = false;
+    fightActive = false;
+    if (typeof overlayWin !== "undefined" && overlayWin) {
+      overlayWin.classList.remove("show");
+    }
+    document.body.classList.remove("battle-active");
     completeAct();
     return;
   }
 
-  /* ГЛАВНОЕ ИСПРАВЛЕНИЕ:
-     обновляем состояние карты СРАЗУ — до начала переворота.
-     Иначе в окне 900–980 мс (flip уже закончился, finishBack ещё не сработал)
-     боевой узел оставался .open, и клик по нему перезапускал тот же бой. */
   nd.traveled = true;
   run.cur     = nd;
-  renderMapStates();            /* боевой узел → traveled+current, его соседи → open */
+  renderMapStates();
 
-  /* финальная зачистка — выполняется по окончании переворота */
   var finishBack = function(){
-    /* ЗАЩИТА ОТ ГОНОК (исправляет баг со вторым боем и "Новым run"):
-       если за эти 980 мс пользователь уже успел кликнуть следующий узел (run.inNode сменился)
-       или нажать "Новый run" (run.inNode = null), НЕЛЬЗЯ затирать состояние нового боя! */
-    if(run.inNode !== nd) return;
-
     fightActive = false;
     document.body.classList.remove("battle-active");
     state.busy = false;
-    run.inNode = null;          /* открывает клики по карте для пользователя */
+    flipping = false;
+    tableFlip.classList.remove("no-pan");
+    run.inNode = null;
     centerNode(nd, true);
   };
 
-  if(tableFlip.classList.contains("flipped")){
-    console.log("[returnToMap] already on map, calling finishBack sync");
-    finishBack();
-  }else{
+  state.busy = false;
+  fightActive = false;
+  if (typeof overlayWin !== "undefined" && overlayWin) {
+    overlayWin.classList.remove("show");
+  }
+
+  if(!tableFlip.classList.contains("flipped")){
     console.log("[returnToMap] on battle side, calling flipTable");
     flipTable();
-    setTimeout(finishBack, FLIP_MS + 80);
+  }else{
+    console.log("[returnToMap] already on map");
   }
+  finishBack();
 }
 
 var btnRestartFight = document.getElementById("btnRestartFight");
@@ -1169,8 +1074,6 @@ btnRestartFight.addEventListener("click", function(e){
   overlayLose.classList.remove("show");
   playSfx("card");
   state.hp = MAX_HP;
-  /* этап 5: если бой шёл по маршруту карты — поражение откатывает к узлу,
-     враг не листается; вне маршрута — перезапуск с того же духа */
   if(run.inNode){
     run.phase = 0;
     setTimeout(function(){ beginRunFight(); }, 250);
@@ -1179,7 +1082,6 @@ btnRestartFight.addEventListener("click", function(e){
   }
 });
 
-/* Новый run — заглушка панели (этап 5 переопределяет обработчик на карту) */
 btnNewRun.addEventListener("click", function(){
   state.enemyIdx = 0;
   state.hp = MAX_HP;
@@ -1189,7 +1091,6 @@ btnNewRun.addEventListener("click", function(){
   startFight();
 });
 
-/* этап 4.1: тумблер реликта "Лупа" (тест до этапа 7): включает табличку-улику на доске */
 var btnLupa = document.getElementById("btn-lupa");
 btnLupa.addEventListener("click", function(e){
   e.stopPropagation();
@@ -1202,8 +1103,6 @@ btnLupa.addEventListener("click", function(e){
 
 /* ================================================================
    ================= ЭТАП 5: КАРТА АКТА (ГРАНЬ .face-map) ==========
-   Горизонтальный путь слева направо: col 0 старт ... col 11 босс.
-   Детерминированная генерация: seed = run*100 + act.
    ================================================================ */
 
 var mapPanEl    = document.getElementById("mapPan");
@@ -1211,9 +1110,6 @@ var mapScrollEl = document.getElementById("mapScroll");
 var mapLinesEl  = document.getElementById("mapLines");
 var mapHeadEl   = document.getElementById("mapHead");
 
-/* ---------- ЭТАП 5.3/5.4: ЛЕГЕНДА КАРТЫ (левый нижний угол .face-map) ----------
-   Функция buildLegend() ОПРЕДЕЛЯЕТСЯ здесь, но ВЫЗЫВАЕТСЯ в буте ПОСЛЕ
-   renderMap() и обёрнута в try/catch: падение легенды не отменяет рендер карты. */
 function buildLegend(){
   var legendEl = document.getElementById("mapLegend");
   var gridEl   = document.getElementById("legendGrid");
@@ -1239,9 +1135,6 @@ function buildLegend(){
     r.appendChild(t);
     return r;
   }
-  /* глиф+подпись капсом: ТЕ ЖЕ строки типов, что создаёт генератор карты
-     (fight/elite/event/rest/shop/chest/boss) — единый источник MAP_GLYPHS
-     через buildGlyph/glyphSubs. Состояния рисуются отдельными mini-SVG. */
   gridEl.appendChild(row("fight", "БОЙ"));
   gridEl.appendChild(row("elite", "ЭЛИТА"));
   gridEl.appendChild(row("event", "СОБЫТИЕ"));
@@ -1249,15 +1142,12 @@ function buildLegend(){
   gridEl.appendChild(row("shop",  "ЛАВКА"));
   gridEl.appendChild(row("chest", "СУНДУК"));
   gridEl.appendChild(row("boss",  "БОСС"));
-  /* разделитель + состояния узла: mini-SVG без buildGlyph (в словаре
-     таких ключей нет) — кольцо/пульс/блёклый круг, как у .map-node */
   var sep = document.createElement("div");
   sep.className = "lg-sep";
   gridEl.appendChild(sep);
   gridEl.appendChild(dot("cur",   "ТЕКУЩИЙ"));
   gridEl.appendChild(dot("pulse", "ДОСТУПНЫЙ"));
   gridEl.appendChild(dot("faded", "ПРОЙДЕННЫЙ"));
-  /* <1200px: свёрнута в "?" — клик раскрывает/сворачивает */
   btnEl.addEventListener("click", function(e){
     e.stopPropagation();
     playSfx("card");
@@ -1266,12 +1156,10 @@ function buildLegend(){
 }
 
 var COLS = 12, COL_W = 172, PAD_X = 60;
-var SHEET_W = PAD_X * 2 + (COLS - 1) * COL_W;   /* 2040px — шире грани → pan по X */
+var SHEET_W = PAD_X * 2 + (COLS - 1) * COL_W;
 
-/* ---------- состояние пути (объявлено рано: обработчики боя ссылаются на run) ---------- */
 var run = { num:1, act:1, maxAct:3, map:null, cur:null, inNode:null, pending:[], phase:0, resting:false };
 
-/* ---------- seeded PRNG (mulberry32): детерминированность по seed ---------- */
 function mulberry32(a){
   return function(){
     a |= 0; a = (a + 0x6D2B79F5) | 0;
@@ -1281,14 +1169,12 @@ function mulberry32(a){
   };
 }
 
-/* ---------- семплер врагов (интерфейс под этап 4.5, на заглушках CONTENT) ---------- */
 var THEME_WEIGHTS = {
-  1: { simple:.4, continuous:.4 },                       /* остальное .2 */
-  2: { future:.35, perfect:.35 },                        /* остальное .3 */
-  3: null                                                /* без весов */
+  1: { simple:.4, continuous:.4 },
+  2: { future:.35, perfect:.35 },
+  3: null
 };
 function enemyTheme(e){
-  /* topic/trap читаем если есть, иначе игнорируем (заглушки) */
   if(typeof e.topic === "string"){
     var t = e.topic.toLowerCase();
     var fams = ["simple","continuous","perfect","future"];
@@ -1309,7 +1195,6 @@ function weightedPick(rng, list, weights){
   for(i=0;i<list.length;i++){ r -= wts[i]; if(r <= 0) return list[i]; }
   return list[list.length-1];
 }
-/* seeded-shuffle (Фишер–Йетс через rng) */
 function seededShuffle(rng, list){
   var a = list.slice(), i, j, tmp;
   for(i=a.length-1;i>0;i--){
@@ -1318,14 +1203,12 @@ function seededShuffle(rng, list){
   }
   return a;
 }
-/* sampleEnemies(act, count, seed): count без повторов внутри акта;
-   пул исчерпан = перетасовка сброса (resample). Возвращает массив объектов врагов. */
 function sampleEnemies(act, count, seed){
   var rng = mulberry32((seed|0)*7919 + act*104729);
   var pool = CONTENT.enemies.slice();
   var out = [];
   for(var k=0;k<count;k++){
-    if(!pool.length){ pool = CONTENT.enemies.slice(); }   /* сброс исчерпан — перетасовка */
+    if(!pool.length){ pool = CONTENT.enemies.slice(); }
     var shuffled = seededShuffle(rng, pool);
     var pickE = weightedPick(rng, shuffled, THEME_WEIGHTS[act] || null);
     pool.splice(pool.indexOf(pickE), 1);
@@ -1333,7 +1216,6 @@ function sampleEnemies(act, count, seed){
   }
   return out;
 }
-/* элита: враг с trap:true (заглушка: Stative-Мора); fallback — последний в CONTENT */
 function eliteEnemy(){
   for(var i=0;i<CONTENT.enemies.length;i++) if(CONTENT.enemies[i].trap) return CONTENT.enemies[i];
   var st = null;
@@ -1341,7 +1223,6 @@ function eliteEnemy(){
   return st || CONTENT.enemies[CONTENT.enemies.length-1];
 }
 
-/* ---------- генерация карты акта ---------- */
 function genMap(runNum, act, seedOverride){
   var seed = (seedOverride !== undefined) ? seedOverride : (runNum * 100 + act);
   var rng = mulberry32(seed);
@@ -1351,7 +1232,7 @@ function genMap(runNum, act, seedOverride){
     var n;
     if(c === 0) n = 1;
     else if(c === COLS-1) n = 1;
-    else n = 1 + Math.floor(rng()*4);            /* col 1-10: 1-4 узла */
+    else n = 1 + Math.floor(rng()*4);
     var col = [];
     for(i=0;i<n;i++){
       col.push({
@@ -1364,7 +1245,6 @@ function genMap(runNum, act, seedOverride){
     nodes.push(col);
   }
 
-  /* форвард-рёбра: каждый узел col 0..10 → 1-2 случайных узла следующей колонки */
   for(c=0;c<COLS-1;c++){
     for(i=0;i<nodes[c].length;i++){
       var outs = 1 + (rng() < 0.45 ? 1 : 0);
@@ -1373,7 +1253,6 @@ function genMap(runNum, act, seedOverride){
       for(j=0;j<targets.length;j++) edges.push({ from:nodes[c][i], to:targets[j] });
     }
   }
-  /* обратный проход: докидываем входящие тем, у кого ноль (гарантия достижимости) */
   for(c=COLS-1;c>=1;c--){
     for(i=0;i<nodes[c].length;i++){
       var hasIn = false;
@@ -1385,7 +1264,6 @@ function genMap(runNum, act, seedOverride){
     }
   }
 
-  /* типы узлов */
   function flat(from, to){
     var arr = [];
     for(var cc=from;cc<=to;cc++) arr = arr.concat(nodes[cc]);
@@ -1393,10 +1271,9 @@ function genMap(runNum, act, seedOverride){
   }
   function rollType(c, rngFn){
     var r = rngFn();
-    if(c >= 1 && c <= 4){                     /* бой 70 / событие 20 / сундук 10 */
+    if(c >= 1 && c <= 4){
       if(r < .7) return "fight"; if(r < .9) return "event"; return "chest";
     }
-    /* col 6-9 базово: бой 50 / элита 15 / событие 15 / сундук 12 / привал 8 */
     if(r < .5) return "fight"; if(r < .65) return "elite"; if(r < .8) return "event";
     if(r < .92) return "chest"; return "rest";
   }
@@ -1404,13 +1281,10 @@ function genMap(runNum, act, seedOverride){
   for(c=6;c<=9;c++) for(i=0;i<nodes[c].length;i++) nodes[c][i].type = rollType(c, rng);
   for(i=0;i<nodes[10].length;i++) nodes[10][i].type = (rng() < .5 ? "fight" : "elite");
 
-  /* гарантированный привал: col 5 или 6 */
   var restA = (rng() < .5) ? 5 : 6;
   nodes[restA][Math.floor(rng()*nodes[restA].length)].type = "rest";
-  /* гарантированный привал перед боссом: col 9 или 10 */
   var restB = (rng() < .5) ? 9 : 10;
   nodes[restB][Math.floor(rng()*nodes[restB].length)].type = "rest";
-  /* ровно одна лавка в col 3-4 и ровно одна в col 7-8 */
   function placeShop(lo, hi){
     var cand = flat(lo, hi);
     var pickN = cand[Math.floor(rng()*cand.length)];
@@ -1418,7 +1292,6 @@ function genMap(runNum, act, seedOverride){
     for(var k=0;k<cand.length;k++) if(cand[k] !== pickN && cand[k].type === "shop") cand[k].type = "fight";
   }
   placeShop(3,4); placeShop(7,8);
-  /* col 5 не может стать ничем иным, кроме как было задано roll'ом (col 5 вне правил типов) */
   for(i=0;i<nodes[5].length;i++){
     if(nodes[5][i].type !== "rest" && nodes[5][i].type !== "shop"){
       nodes[5][i].type = (rng() < .7) ? "fight" : (rng() < .5 ? "event" : "chest");
@@ -1427,7 +1300,6 @@ function genMap(runNum, act, seedOverride){
   nodes[0][0].type = "start";
   nodes[COLS-1][0].type = "boss";
 
-  /* семплирование врагов: обычный бой — 1, элита — trap-враг, босс — 3 фазы из остатка пула */
   var battleSeq = sampleEnemies(act, 24, seed);
   var bIdx = 0;
   var bossPool = seededShuffle(rng, CONTENT.enemies.slice());
@@ -1442,8 +1314,6 @@ function genMap(runNum, act, seedOverride){
       nd.enemy = eliteEnemy();
       nd.phases = [nd.enemy];
     }else if(nd.type === "boss"){
-      /* этап 6: босс-узел пока = обычный бой с одним врагом
-         (3 фазы подряд вернутся вместе с полным боссом) */
       nd.phases = [nd.enemy];
     }
   }
@@ -1451,7 +1321,6 @@ function genMap(runNum, act, seedOverride){
   return { seed:seed, nodes:nodes, edges:edges };
 }
 
-/* ---------- граф карты: утилиты ---------- */
 function allNodes(){
   var arr = [];
   if(!run.map) return arr;
@@ -1472,19 +1341,13 @@ function openEdges(){
   return res;
 }
 
-/* ---------- рендер листа карты + состояния (этап 5.1) ----------
-   renderMapStates(): пересчёт available-узлов; вызывается при генерации
-   карты, после возврата из боя и после любого изменения current. */
 function renderMap(){
-  /* чистим старые узлы/печать (svg-линии и заголовок переиспользуем) */
   var old = mapScrollEl.querySelectorAll(".map-node,.map-start");
   for(var o=0;o<old.length;o++) old[o].parentNode.removeChild(old[o]);
   while(mapLinesEl.firstChild) mapLinesEl.removeChild(mapLinesEl.firstChild);
   mapScrollEl.style.width = SHEET_W + "px";
   mapHeadEl.textContent = "АКТ " + run.act + " · ПУТЬ К ДУХАМ · seed " + run.map.seed;
 
-  /* линии-нити: горизонтальные bezier пунктиром (viewBox 0..100 по высоте,
-      preserveAspectRatio="none" растягивает нормализованные Y на всю грань) */
   mapLinesEl.setAttribute("viewBox", "0 0 " + SHEET_W + " 100");
   for(var e=0;e<run.map.edges.length;e++){
     var ed = run.map.edges[e];
@@ -1498,7 +1361,6 @@ function renderMap(){
     mapLinesEl.appendChild(pth);
     ed.el = pth;
   }
-  /* узлы */
   var list = allNodes();
   for(var i=0;i<list.length;i++){
     var nd = list[i];
@@ -1515,7 +1377,6 @@ function renderMap(){
     mapScrollEl.appendChild(div);
     nd.el = div;
   }
-  /* сургучная печать START слева */
   var st = document.createElement("div");
   st.className = "map-start";
   st.style.left = nodes0x() + "px";
@@ -1530,8 +1391,6 @@ function renderMap(){
 }
 function nodes0x(){ return run.map.nodes[0][0].x; }
 
-/* ЕДИНЫЙ КЛАСС ДОСТУПНОСТИ (этап 5.2): ставится renderMapStates(),
-   проверяется только обработчиком pointerup на .face-map. */
 var OPEN = "open";
 function availableNodes(){
   var res = [], list = allNodes();
@@ -1546,8 +1405,8 @@ function renderMapStates(){
     var nd = list[i], cl = nd.el.classList;
     cl.remove("traveled","current",OPEN);
     if(nd.traveled) cl.add("traveled");
-    if(run.cur && nd === run.cur) cl.add("current");   /* текущий — всегда, даже старт */
-    else if(isOpenNode(nd)) cl.add(OPEN);              /* available: следующий шаг из current */
+    if(run.cur && nd === run.cur) cl.add("current");
+    else if(isOpenNode(nd)) cl.add(OPEN);
   }
   for(i=0;i<run.map.edges.length;i++){
     var ed = run.map.edges[i];
@@ -1558,7 +1417,6 @@ function renderMapStates(){
     else cls += "m-future";
     ed.el.setAttribute("class", cls);
   }
-  /* самотест единого класса доступности (этап 5.2) */
   console.assert(
     mapScrollEl.querySelectorAll(".map-node." + OPEN).length === availableNodes().length,
     "open class mismatch"
@@ -1570,7 +1428,6 @@ function isOpenNode(nd){
   return false;
 }
 
-/* ---------- PAN по X: drag мышью/тачем + колесо; clamp по краям ---------- */
 var panX = 0, panAnim = null;
 function panMin(){ return Math.min(0, (mapPanEl.clientWidth || 800) - SHEET_W); }
 function applyPan(){
@@ -1586,33 +1443,27 @@ function centerNode(nd, animate){
   var from = panX, t0 = performance.now(), DUR = 600;
   (function step(now){
     var k = Math.min(1, (now - t0)/DUR);
-    k = 1 - Math.pow(1-k, 3);                    /* ease-out cubic */
+    k = 1 - Math.pow(1-k, 3);
     panX = from + (target - from)*k;
     applyPan();
     if(k < 1) panAnim = requestAnimationFrame(step);
     else panAnim = null;
   })(performance.now());
 }
-/* drag (pointer events: мышь + тач одним кодом).
-   ВАЖНО (этап 5.2): НЕ используем setPointerCapture и НЕ делаем
-   preventDefault/stopPropagation в pointerdown — capture ретаргетит
-   события на контейнер и гасит активацию узлов. pointermove висит на
-   window, чтобы drag не терялся за пределами панели. */
+
 var dragging = false, dragStartX = 0, dragStartY = 0, dragStartPan = 0, dragMoved = false;
 mapPanEl.addEventListener("pointerdown", function(e){
   if(tableFlip.classList.contains("no-pan")) return;
-  /* НЕ setPointerCapture, НЕ preventDefault/stopPropagation — иначе
-     браузер ретаргетит/гасит события и тап по узлу не доходит (этап 5.2) */
   dragging = true; dragMoved = false;
   dragStartX = e.clientX; dragStartY = e.clientY; dragStartPan = panX;
   mapPanEl.classList.add("dragging");
-  
 });
 window.addEventListener("pointermove", function(e){
   if(!dragging) return;
   var dx = e.clientX - dragStartX;
-  if(Math.abs(dx) > 6 || Math.abs(e.clientY - dragStartY) > 6) dragMoved = true;
-  if(!dragMoved) return;              /* до порога 6px — это ещё тап, не pan */
+  var dy = e.clientY - dragStartY;
+  if(Math.abs(dx) > 20 || Math.abs(dy) > 20) dragMoved = true;
+  if(!dragMoved) return;
   panX = dragStartPan + dx;
   applyPan();
 });
@@ -1623,7 +1474,7 @@ function endDrag(){
 }
 window.addEventListener("pointerup", endDrag);
 window.addEventListener("pointercancel", endDrag);
-/* колесо на грани карты = горизонтальный скролл */
+
 mapPanEl.addEventListener("wheel", function(e){
   if(!tableFlip.classList.contains("flipped")) return;
   e.preventDefault();
@@ -1631,13 +1482,7 @@ mapPanEl.addEventListener("wheel", function(e){
   panX -= d * 1.4;
   applyPan();
 }, {passive:false});
-/* ---------- АКТИВАЦИЯ УЗЛОВ КАРТЫ (этап 5.2): ЧЕРЕЗ POINTERUP, НЕ CLICK ----------
-   Делегирование на контейнере .face-map. В pointerdown НЕ лезем в capture и
-   не отменяем дефолт — там живёт только pan-drag. Слушатель 'click' для
-   активации убран совсем: после setPointerCapture/pan браузер может ретаргетить
-   или погасить click, поэтому решаем исход тапа сами на pointerup.
-   ЕДИНЫЙ КЛАСС ДОСТУПНОСТИ: OPEN (см. ниже) — его ставит renderMapStates(),
-   его же проверяет этот обработчик. */
+
 function findNodeByEl(nodeEl){
   var list = allNodes();
   for(var i=0;i<list.length;i++) if(list[i].el === nodeEl) return list[i];
@@ -1645,39 +1490,47 @@ function findNodeByEl(nodeEl){
 }
 function shakeNode(el){
   el.classList.remove("node-shake");
-  void el.offsetWidth;                 /* перезапуск анимации */
+  void el.offsetWidth;
   el.classList.add("node-shake");
   setTimeout(function(){ el.classList.remove("node-shake"); }, 950);
 }
+
+/* ФИКС: Защита от кликов по карте во время или сразу после закрытия оверлея возврата */
 mapPanEl.addEventListener("pointerup", function(e){
+  if (window.__blockMapClicksUntil && Date.now() < window.__blockMapClicksUntil) {
+    console.log("[mapPanEl] pointerup blocked by __blockMapClicksUntil");
+    return;
+  }
   var wasDrag = dragMoved;
-  dragMoved = false;                   /* сброс в любом случае */
+  dragMoved = false;
   if(location.search.indexOf("debug") !== -1){
     console.log("[map-debug] pointerup target:", e.target, "dragMoved:", wasDrag);
   }
-  if(wasDrag) return;                  /* отпускание после pan — не активация */
-  if(flipping || tableFlip.classList.contains("no-pan")) return; /* время переворота: грани глухи */
+  if(wasDrag) return;
+  if(flipping || tableFlip.classList.contains("no-pan")) return;
   var nodeEl = (e.target && e.target.closest) ? e.target.closest(".map-node") : null;
-  if(!nodeEl && document.elementFromPoint){
-    nodeEl = document.elementFromPoint(e.clientX, e.clientY);
-    nodeEl = nodeEl && nodeEl.closest ? nodeEl.closest(".map-node") : null;
+  if(!nodeEl && document.elementFromPoint && e.target && mapPanEl.contains(e.target)){
+    var elAtPoint = document.elementFromPoint(e.clientX, e.clientY);
+    if(elAtPoint && mapPanEl.contains(elAtPoint)){
+      nodeEl = elAtPoint.closest ? elAtPoint.closest(".map-node") : null;
+    }
   }
   if(location.search.indexOf("debug") !== -1){
     console.log("[map-debug] resolved node:", nodeEl);
   }
-  if(!nodeEl) return;                            /* дерево/нити — ничего */
-  if(!nodeEl.classList.contains(OPEN)){          /* будущий/пройденный/текущий */
+  if(!nodeEl) return;
+  if(!nodeEl.classList.contains(OPEN)){
     playSfx("hit");
     shakeNode(nodeEl);
     return;
   }
   var nd = findNodeByEl(nodeEl);
   if(!nd) return;
-  window.startBattle(nd);              /* тонкий алиас на enterNode — единственную точку входа */
+  window.startBattle(nd);
 });
 mapPanEl.addEventListener("pointercancel", function(){ dragMoved = false; });
 
-/* ---------- оверлей-заглушка (привал / акт завершён / run завершён) ---------- */
+/* ---------- оверлей-заглушка ---------- */
 var overlayGeneric = document.getElementById("overlayGeneric");
 var ogTitleEl = document.getElementById("ogTitle");
 var ogBodyEl  = document.getElementById("ogBody");
@@ -1698,21 +1551,13 @@ ogBtn.addEventListener("click", function(e){
   if(ogAction){ var a = ogAction; ogAction = null; a(); }
 });
 
-/* ---------- поток: вход в узел → бой → возврат ---------- */
-/* ЕДИНЫЙ ДИСПЕТЧЕР ВХОДА В УЗЕЛ (этап 5.3).
-   enterNode — единственная точка входа; ветвление по node.type:
-     battle/elite/boss → beginFight(node)   (семплирование, доска, рука, flipTable)
-     rest/shop/event/chest → openRoom(node) (комнатные свитки-заглушки)
-   НИГДЕ внутри (ни в enterNode, ни в beginFight/openRoom) нет вызовов
-   window.startBattle или повторного enterNode — взаимная рекурсия
-   startBattle ⇄ enterNode устранена. window.startBattle — тонкий алиас. */
 function beginFight(nd){
   run.inNode = nd;
   run.pending = (nd.phases && nd.phases.length) ? nd.phases.slice() : [nd.enemy];
   run.phase = 0;
   state.banished = false;
   document.body.classList.add("battle-active");
-  beginRunFight();                   /* стартует бой + flipTable на грань боя */
+  beginRunFight();
 }
 function openRoom(nd){
   if(nd.type === "rest"){ doRest(nd); return; }
@@ -1725,7 +1570,7 @@ function openRoom(nd){
   );
 }
 function enterNode(nd){
-  if(state.entering) return;         /* реентри-гард: один вход за тап */
+  if(state.entering) return;
   state.entering = true;
   try{
     if(location.search.indexOf("debug") !== -1){
@@ -1740,14 +1585,11 @@ function enterNode(nd){
   }
 }
 function beginRunFight(){
-  /* текущий враг из очереди узла → в боевой state (механику боя не трогаем) */
   var en = run.pending[run.phase];
   state.enemyIdx = CONTENT.enemies.indexOf(en);
   if(state.enemyIdx < 0) state.enemyIdx = 0;
-  startFight();                      /* рендер идёт через battle-active, переворот уже сделан */
+  startFight();
 }
-/* после изгнания: [Вернуться на карту] завершает бой.
-   Боевые и элитные узлы = один враг за узел; босс = 3 фазы подряд (run.pending). */
 function afterBanish(){
   var nd = run.inNode;
   if(nd && run.phase + 1 < run.pending.length){
@@ -1759,7 +1601,7 @@ function afterBanish(){
   returnToMap();
 }
 function travelTo(nd, silent){
-  if(!nd){                            /* ЭТАП 6.6: возврат без узла — просто flip на карту */
+  if(!nd){
     if(!tableFlip.classList.contains("flipped")){
       flipTable();
       setTimeout(function(){ if(window.clearMapBusy) window.clearMapBusy(); }, FLIP_MS + 60);
@@ -1768,15 +1610,7 @@ function travelTo(nd, silent){
   }
   if(run.cur){ run.cur.traveled = true; }
   run.cur = nd;
-  /* ЭТАП 6.5: run.inNode НЕ сбрасываем до переворота — он нужен guard'у и
-     финальной очистке в returnToMap(); battle-active держится через
-     fightActive (не через inNode), а inNode чистится после приземления. */
   if(!silent) playSfx("candle");
-  /* ЭТАП 6.2 ЧАСТЬ A(4): снятие блокировки при переходе на карту — иначе
-     pointerup-обработчик карты (if(state.busy) return) глушит клики,
-     и следующая колонка после возврата неактивна.
-     ЭТАП 6.3: flipping=false убрано — это внешняя переменная другой IIFE,
-     no-op; flipTable() ниже сам управляет флагом. */
   state.busy = false;
   tableFlip.classList.remove("no-pan");
   if(tableFlip.classList.contains("flipped")){
@@ -1792,8 +1626,6 @@ function travelTo(nd, silent){
     }, FLIP_MS + 60);
   }
 }
-/* ЭТАП 6.5: страховка от залипшего busy — flipTable при приземлении на грань
-   карты зовёт этот мост, если бой уже завершён (banished снят / вне боя). */
 window.clearMapBusy = function(){
   if(!document.body.classList.contains("battle-active") && !state.banished){
     state.busy = false;
@@ -1801,7 +1633,7 @@ window.clearMapBusy = function(){
 };
 function doRest(nd){
   playSfx("win");
-  var gained = Math.min(MAX_HP - state.hp, 2);   /* +2 свечи, не выше потолка */
+  var gained = Math.min(MAX_HP - state.hp, 2);
   state.hp = Math.min(MAX_HP, state.hp + 2);
   renderHp();
   showGeneric(
@@ -1853,28 +1685,23 @@ function newRun(){
   if(!tableFlip.classList.contains("flipped")) flipTable();
 }
 
-/* ЭТАП 6.8 (ПРАВКА 4): ЕДИНЫЙ ПРЯМОЙ слушатель на btnNextEnemy.
-   Делегирование на overlayWin УДАЛЁНО полностью (дубль). Кнопка статична в
-   DOM (перерендера панели нет), поэтому прямой слушатель надёжен.
-   GUARD первой строкой: реагирует ТОЛЬКО когда бой реально активен на грани
-   боя и дух изгнан — синтезированный после тапа click вне этого состояния
-   безвреден. state.busy=true НЕ ставим — returnToMap() сам чистит busy. */
+/* ФИКС: Единый обработчик клика по кнопке возврата с защитой от двойного клика */
 btnNextEnemy.addEventListener("click", function(e){
   console.log("[btnNextEnemy] click detected");
   e.stopPropagation();
+  e.preventDefault();
   if(!canReturnToMap()){
     console.log("[btnNextEnemy] guard blocked");
     return;
   }
+  btnNextEnemy.disabled = true;
   console.log("[btnNextEnemy] guard passed");
-  overlayWin.classList.remove("show");
+  window.__blockMapClicksUntil = Date.now() + 1200;
+  if(overlayWin) overlayWin.classList.remove("show");
   playSfx("card");
   returnToMap();
 });
 
-
-/* [Новый run] — теперь настоящий: генерирует карту и выходит на неё.
-   Обработчик-заглушка этапа 3 снимается заменой узла (гарантированно). */
 (function(){
   var clone = btnNewRun.cloneNode(true);
   btnNewRun.parentNode.replaceChild(clone, btnNewRun);
@@ -1891,18 +1718,14 @@ btnNextEnemy.addEventListener("click", function(e){
   });
 })();
 
-/* отладочные ссылки для автотестов (не используются игрой) */
 window.__battle = {
   CONTENT: CONTENT,
   state: state,
   startFight: startFight,
   currentEnemy: currentEnemy,
   pickBattleCards: pickBattleCards,
-  /* ЭТАП 6.2 ЧАСТЬ C (тесты): программный прогон проверки пары и диагноз */
   checkSlots: checkSlots,
   missDiagHtml: missDiagHtml,
-  /* ЭТАП 6.2 ЧАСТЬ C (тесты): пересборка карты с фиксированным seed
-     (для гарантии боевого узла в col1); НЕ для игровой логики. */
   setMapSeed: function(seed){
     run.map = genMap(run.num, run.act, seed);
     run.cur = run.map.nodes[0][0];
@@ -1930,11 +1753,10 @@ window.__map = {
   get pan(){ return panX; },
   set pan(v){ panX = v; applyPan(); },
   sheetW: function(){ return SHEET_W; },
-  availableNodes: availableNodes,   /* единый список доступных (класс OPEN) */
+  availableNodes: availableNodes,
   OPEN: OPEN
 };
 
-/* selftest проходимости: 10 сгенерированных карт в console.log */
 function verifyMap(m){
   var reachable = {}, frontier = [m.nodes[0][0]];
   reachable[m.nodes[0][0].id] = true;
@@ -1977,7 +1799,6 @@ function logMaps(){
   }
 }
 
-/* ресайз: пересчитать масштаб глубины доски и полосы объяснения + clamp пана */
 var resizeT = null;
 window.addEventListener("resize", function(){
   if(resizeT) clearTimeout(resizeT);
@@ -1988,13 +1809,7 @@ window.addEventListener("resize", function(){
   }, 200);
 });
 
-/* ================= BOOT (этап 4.3 + 5.4): старт = ГРАНЬ КАРТЫ =================
-   До первой отрисовки: генерация карты акта 1, current = узел старта,
-   available = узлы колонки 1 (соединённые со стартом). Никакого авто-боя
-   и авто-раздачи: рука/доска рендерятся только при входе в бой через
-   flipTable()/startBattle(node). */
-/* window error-обработчик (этап 5.4): падение любой фазы не оставляет
-   «пустой стол» без диагностики — пишем ошибку и показываем её на экране. */
+/* ================= BOOT ================= */
 window.addEventListener("error", function(ev){
   try{
     console.error("[game-error]", ev.message, ev.filename, ev.lineno);
@@ -2011,32 +1826,33 @@ window.addEventListener("error", function(ev){
     pre.textContent += "\n[game-error] " + ev.message + " @:" + ev.lineno;
   }catch(_e){}
 });
-fitFaceHeights();                 /* явная высота граней до первого рендера */
+fitFaceHeights();
 run.map = genMap(run.num, run.act);
-run.cur = run.map.nodes[0][0];    /* текущий = старт */
+run.cur = run.map.nodes[0][0];
 run.cur.traveled = true;
-fightActive = false;              /* бой не активен — дух/доска/HP скрыты */
+fightActive = false;
 document.body.classList.remove("battle-active");
-tableFlip.classList.add("flipped"); /* начальная грань = КАРТА (.flipped) */
+tableFlip.classList.add("flipped");
 document.body.classList.add("table-map-side", "map-active");
-renderMap();                      /* внутри вызывает renderMapStates: current=старт, open=col 1 */
-centerNode(run.cur, false);       /* старт центрируется сразу */
-/* ПОРЯДОК БУТА (этап 5.4): карта рисуется ПЕРВОЙ; buildLegend() вызывается
-   в самом конце скрипта (после объявления всех зависимостей), обёрнутый
-   в try/catch — падение легенды не отменяет уже отрисованную карту. */
+renderMap();
+centerNode(run.cur, false);
 
-/* этап 5.3: window.startBattle — ТОЛЬКО тонкий алиас на enterNode
-   (единый диспетчер входа). Никакой рекурсии: внутри enterNode/beginFight/
-   openRoom вызовов startBattle/enterNode нет; pointerup карты зовёт enterNode. */
+/* ФИКС: В startBattle тоже добавляем защиту от блокировки кликов */
 window.startBattle = function(node){
-  if(!node || state.busy) return;
+  if (window.__blockMapClicksUntil && Date.now() < window.__blockMapClicksUntil) {
+    console.log("[startBattle] blocked by __blockMapClicksUntil");
+    return;
+  }
+  if (!tableFlip.classList.contains("flipped")) {
+    console.log("[startBattle] blocked: table is not on map side");
+    return;
+  }
+  state.busy = false;
+  if(!node) return;
   if(location.search.indexOf("debug") !== -1){ console.log("startBattle:", node.id, node.type); }
   enterNode(node);
 };
 
-/* ---------- ЭТАП 5.4: РЕНДЕР НИТЕЙ — часть единого обновления состояний ----------
-   Вызывается из renderMapStates() (ниже): после возврата из боя нити тоже
-   перекрашиваются (m-traveled / m-open / m-future), а не остаются «будущими». */
 function renderEdgeStates(){
   if(!run.map) return;
   for(var e=0;e<run.map.edges.length;e++){
@@ -2050,7 +1866,6 @@ function renderEdgeStates(){
   }
 }
 
-/* самотест единства классов (этап 5.2): open-класс совпадает со списком available */
 function assertOpenSync(){
   console.assert(
     mapScrollEl.querySelectorAll(".map-node." + OPEN).length === availableNodes().length,
@@ -2058,7 +1873,6 @@ function assertOpenSync(){
   );
 }
 
-/* ---------- финальный бут: легенда ПОСЛЕ готовой карты, автотесты ---------- */
 try{ buildLegend(); }catch(err){ console.error("legend build failed:", err); }
 assertOpenSync();
 if(location.search.indexOf("debug") !== -1){ logMaps(); }

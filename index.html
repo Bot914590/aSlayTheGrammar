@@ -122,9 +122,7 @@
     <div class="candle-shadow"></div>
   </div>
 
-  <!-- ЭТАП 6.1: ЛЕГЕНДА КАРТЫ — ВНЕ СТОЛА, панель в слое комнаты слева от стола;
-       на ширине <1400px скрыта, вместо неё круглая кнопка "?" (клик раскрывает
-       панель ПОВЕРХ левого края стола и сворачивает обратно) -->
+  <!-- ЭТАП 6.1: ЛЕГЕНДА КАРТЫ — ВНЕ СТОЛА -->
   <div class="legend" id="mapLegend">
     <div class="legend-card" id="legendCard">
       <div class="lg-title">Легенда карты</div>
@@ -156,7 +154,21 @@
     <div class="sp-rule"></div>
     <div class="sp-phrase" id="winPhrase"></div>
     <div class="sp-why" id="winWhy"></div>
-    <button class="btn" id="btnNextEnemy" type="button">Вернуться на карту</button>
+    <div class="sp-nav-hint">Кнопка перехода на карту &mdash; справа &#10148;</div>
+  </div>
+
+  <!-- Кнопка возврата на карту: справа от стола (вне столешницы, симметрично легенде слева) -->
+  <div class="win-dock" id="winDock">
+    <button class="win-btn" id="btnNextEnemy" type="button" aria-label="Вернуться на карту">
+      <span class="wb-seal">
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M11 16 h10 M16 11 l5 5 l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <span class="wb-title">НА КАРТУ</span>
+      <span class="wb-sub">продолжить путь &#10148;</span>
+    </button>
   </div>
 </div>
 <div class="overlay" id="overlayLose">
